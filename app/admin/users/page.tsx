@@ -18,11 +18,23 @@ export default function AdminUsers() {
   const [newUser, setNewUser] = useState({ name: "", email: "", role: "user" as "admin" | "user" })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null)
   const { user } = useAuth()
 
   useEffect(() => {
     fetchUsers()
   }, [])
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [toast])
+
+  const showToast = (message: string, type: "success" | "error") => {
+    setToast({ message, type })
+  }
 
   const fetchUsers = async () => {
     try {
@@ -32,6 +44,7 @@ export default function AdminUsers() {
     } catch (err) {
       console.error("Failed to fetch users:", err)
       setError("Nie udało się załadować użytkowników. Spróbuj ponownie później.")
+      showToast("Nie udało się załadować użytkowników", "error")
     } finally {
       setLoading(false)
     }
@@ -41,11 +54,15 @@ export default function AdminUsers() {
     e.preventDefault()
     try {
       const response = await api.post<User>("/api/admin/users", newUser)
-      setUsers([...users, response.data])
+      setUsers(prev => [...prev, response.data])
       setNewUser({ name: "", email: "", role: "user" })
-    } catch (err) {
+      showToast("Użytkownik został dodany pomyślnie", "success")
+      await fetchUsers() // Refresh the list to ensure we have the latest data
+    } catch (err: any) {
       console.error("Failed to add user:", err)
-      setError("Nie udało się dodać użytkownika. Spróbuj ponownie później.")
+      const errorMessage = err.response?.data?.message || "Nie udało się dodać użytkownika"
+      setError(errorMessage)
+      showToast(errorMessage, "error")
     }
   }
 
@@ -53,9 +70,12 @@ export default function AdminUsers() {
     try {
       await api.delete(`/api/admin/users/${id}`)
       setUsers(users.filter((user) => user.id !== id))
-    } catch (err) {
+      showToast("Użytkownik został usunięty", "success")
+    } catch (err: any) {
       console.error("Failed to delete user:", err)
-      setError("Nie udało się usunąć użytkownika. Spróbuj ponownie później.")
+      const errorMessage = err.response?.data?.message || "Nie udało się usunąć użytkownika"
+      setError(errorMessage)
+      showToast(errorMessage, "error")
     }
   }
 
@@ -77,6 +97,17 @@ export default function AdminUsers() {
     <PageTransition>
       <div>
         <h1 className="text-3xl font-bold mb-8 glitch">Zarządzanie Użytkownikami</h1>
+
+        {/* Toast Notification */}
+        {toast && (
+          <div
+            className={`fixed top-4 right-4 p-4 rounded shadow-lg transition-all duration-300 ${
+              toast.type === "success" ? "bg-green-500" : "bg-red-500"
+            }`}
+          >
+            {toast.message}
+          </div>
+        )}
 
         <form onSubmit={handleAddUser} className="neon-box p-4 mb-8">
           <h2 className="text-xl mb-4">Dodaj nowego użytkownika</h2>

@@ -52,9 +52,6 @@ export default function News() {
     } catch (error: any) {
       console.error("Failed to fetch news:", error)
       setError(error.response?.data?.message || "Failed to load news")
-      if (error.response?.status === 401) {
-        window.location.href = "/login"
-      }
     } finally {
       setLoading(false)
     }

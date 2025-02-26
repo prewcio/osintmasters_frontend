@@ -49,14 +49,14 @@ export default function Navbar({ activeVotes }: { activeVotes: number }) {
                 MATERIAŁY
               </Link>
             </li>
-            {/* <li>
+            <li>
               <Link
                 href="/dashboard/chat"
                 className={`hover:text-white transition-colors ${pathname === "/dashboard/chat" ? "text-[#39FF14]" : ""}`}
               >
                 CHAT
               </Link>
-            </li> */}
+            </li>
             <li>
               <Link
                 href="/dashboard/settings"

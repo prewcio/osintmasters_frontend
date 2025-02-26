@@ -4,13 +4,11 @@ import axios from "axios"
 if (typeof window !== 'undefined') {
   window.onerror = function(msg, url, lineNo, columnNo, error) {
     console.error('Client-side error:', { msg, url, lineNo, columnNo, error })
-    window.location.href = '/'
     return false
   }
 
   window.onunhandledrejection = function(event) {
     console.error('Unhandled promise rejection:', event.reason)
-    window.location.href = '/'
   }
 }
 
@@ -74,13 +72,11 @@ const processFailedQueue = (error: any = null) => {
 const getCsrfToken = async () => {
   try {
     await api.get("/sanctum/csrf-cookie")
-    console.log("GOT CSRF")
   } catch (error: any) {
     console.error("Failed to get CSRF token:", error)
     // Check for the specific error case
     if (error.response?.status === 500 && 
         error.response?.data?.message?.includes("no such table: sessions")) {
-      window.location.href = '/'
       return
     }
     throw error
@@ -95,7 +91,6 @@ const restoreSession = async () => {
     if (response.data) {
       // If we successfully restored the session and we're on a public path, redirect to dashboard
       if (typeof window !== 'undefined' && ['/', '/login'].includes(window.location.pathname)) {
-        window.location.href = '/dashboard'
         return null
       }
     }
@@ -166,9 +161,8 @@ api.interceptors.response.use(
         processFailedQueue(refreshError)
         // Only redirect to login if we're not already on the login page
         if (window.location.pathname !== '/login') {
-          window.location.href = '/login'
+          return Promise.reject(refreshError)
         }
-        return Promise.reject(refreshError)
       } finally {
         isRefreshingSession = false
       }
