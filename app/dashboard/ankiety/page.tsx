@@ -37,7 +37,7 @@ export default function Ankiety() {
     const fetchPolls = async () => {
       try {
         setLoading(true)
-        const response = await api.get<Poll[]>("/api/votes")
+        const response = await api.get<Poll[]>("/api/polls")
         setPolls(response.data)
       } catch (err) {
         console.error("Failed to fetch polls:", err)
