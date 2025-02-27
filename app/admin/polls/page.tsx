@@ -18,25 +18,26 @@ type ResponseType = "single" | "multiple" | "text" | "scale"
 interface BaseQuestion {
   question: string
   description?: string
+  type: ResponseType
 }
 
 interface SingleChoiceQuestion extends BaseQuestion {
   type: "single"
   options: string[]
-  optionDescriptions?: string[]
+  optionDescriptions: string[]
 }
 
 interface MultipleChoiceQuestion extends BaseQuestion {
   type: "multiple"
   options: string[]
-  optionDescriptions?: string[]
-  maxChoices?: number
+  optionDescriptions: string[]
+  maxChoices: number
 }
 
 interface TextQuestion extends BaseQuestion {
   type: "text"
-  maxLength?: number
-  placeholder?: string
+  maxLength: number
+  placeholder: string
 }
 
 interface ScaleQuestion extends BaseQuestion {
@@ -44,8 +45,7 @@ interface ScaleQuestion extends BaseQuestion {
   min: number
   max: number
   step: number
-  labels?: { [key: number]: string }
-  description?: string
+  labels: { [key: number]: string }
 }
 
 type Question = SingleChoiceQuestion | MultipleChoiceQuestion | TextQuestion | ScaleQuestion
@@ -105,6 +105,15 @@ interface PaginatedResponse<T> {
   total: number
 }
 
+interface PollState {
+  title: string
+  description: string
+  questions: Question[]
+  is_active: boolean
+  is_system_post: boolean
+  expires_at?: string
+}
+
 export default function AdminPolls() {
   const initialQuestion: SingleChoiceQuestion = {
     type: "single",
@@ -159,9 +168,9 @@ export default function AdminPolls() {
   const fetchPolls = async () => {
     try {
       setLoading(true)
-      const response = await api.get<PaginatedResponse<Poll>>("/api/admin/polls")
-      setPolls(response.data.data)
-      for (const poll of response.data.data) {
+      const response = await api.get<Poll[]>("/api/admin/polls")
+      setPolls(response.data)
+      for (const poll of response.data) {
         const resultsResponse = await api.get<PollResults>(`/api/admin/polls/results/${poll.id}`)
         setPollResults(prev => ({ ...prev, [poll.id]: resultsResponse.data }))
       }
@@ -174,20 +183,64 @@ export default function AdminPolls() {
     }
   }
 
+  const isTextQuestion = (question: Question): question is TextQuestion => {
+    return question.type === "text"
+  }
+
+  const isScaleQuestion = (question: Question): question is ScaleQuestion => {
+    return question.type === "scale"
+  }
+
+  const isSingleChoiceQuestion = (question: Question): question is SingleChoiceQuestion => {
+    return question.type === "single"
+  }
+
+  const isMultipleChoiceQuestion = (question: Question): question is MultipleChoiceQuestion => {
+    return question.type === "multiple"
+  }
+
+  const isChoiceQuestion = (question: Question): question is SingleChoiceQuestion | MultipleChoiceQuestion => {
+    return isSingleChoiceQuestion(question) || isMultipleChoiceQuestion(question)
+  }
+
   const addQuestion = (type: ResponseType) => {
-    let newQuestion: Question
     switch (type) {
-      case "single":
-        newQuestion = { type: "single", question: "", description: "", options: ["", ""], optionDescriptions: ["", ""] }
+      case "single": {
+        const newQuestion: SingleChoiceQuestion = {
+          type: "single",
+          question: "",
+          description: "",
+          options: ["", ""],
+          optionDescriptions: ["", ""]
+        }
+        setQuestions([...questions, newQuestion])
         break
-      case "multiple":
-        newQuestion = { type: "multiple", question: "", description: "", options: ["", ""], optionDescriptions: ["", ""], maxChoices: 2 }
+      }
+      case "multiple": {
+        const newQuestion: MultipleChoiceQuestion = {
+          type: "multiple",
+          question: "",
+          description: "",
+          options: ["", ""],
+          optionDescriptions: ["", ""],
+          maxChoices: 2
+        }
+        setQuestions([...questions, newQuestion])
         break
-      case "text":
-        newQuestion = { type: "text", question: "", description: "", maxLength: 500, placeholder: "" }
+      }
+      case "text": {
+        const newQuestion: TextQuestion = {
+          type: "text",
+          question: "",
+          description: "",
+          maxLength: 500,
+          placeholder: ""
+        }
+        setQuestions([...questions, newQuestion])
         break
-      case "scale":
-        newQuestion = {
+      }
+      case "scale": {
+        const newQuestion: ScaleQuestion = {
           type: "scale",
           question: "",
           description: "",
@@ -196,46 +249,68 @@ export default function AdminPolls() {
           step: 1,
           labels: { 1: "Najniższa", 5: "Najwyższa" }
         }
+        setQuestions([...questions, newQuestion])
         break
+      }
+      default: {
+        throw new Error("Invalid question type")
+      }
     }
-    setQuestions([...questions, newQuestion])
   }
 
   const removeQuestion = (index: number) => {
     setQuestions(questions.filter((_, i) => i !== index))
   }
 
-  const updateQuestion = (index: number, updates: Partial<Question>) => {
+  const updateQuestion = (index: number, updates: Partial<TextQuestion | ScaleQuestion | SingleChoiceQuestion | MultipleChoiceQuestion>) => {
     const newQuestions = [...questions]
-    newQuestions[index] = { ...newQuestions[index], ...updates }
+    const currentQuestion = questions[index]
+
+    if (isTextQuestion(currentQuestion)) {
+      const textUpdates = updates as Partial<TextQuestion>
+      newQuestions[index] = { ...currentQuestion, ...textUpdates }
+    } else if (isScaleQuestion(currentQuestion)) {
+      const scaleUpdates = updates as Partial<ScaleQuestion>
+      newQuestions[index] = { ...currentQuestion, ...scaleUpdates }
+    } else if (isSingleChoiceQuestion(currentQuestion)) {
+      const singleChoiceUpdates = updates as Partial<SingleChoiceQuestion>
+      newQuestions[index] = { ...currentQuestion, ...singleChoiceUpdates }
+    } else if (isMultipleChoiceQuestion(currentQuestion)) {
+      const multipleChoiceUpdates = updates as Partial<MultipleChoiceQuestion>
+      newQuestions[index] = { ...currentQuestion, ...multipleChoiceUpdates }
+    }
+
     setQuestions(newQuestions)
+  }
+
+  const updateOption = (questionIndex: number, optionIndex: number, value: string) => {
+    const question = questions[questionIndex]
+    if (isChoiceQuestion(question)) {
+      const newQuestions = [...questions]
+      const choiceQuestion = newQuestions[questionIndex] as SingleChoiceQuestion | MultipleChoiceQuestion
+      choiceQuestion.options[optionIndex] = value
+      setQuestions(newQuestions)
+    }
   }
 
   const addOption = (questionIndex: number) => {
     const question = questions[questionIndex]
-    if ('options' in question) {
+    if (isChoiceQuestion(question)) {
       const newQuestions = [...questions]
-      ;(newQuestions[questionIndex] as SingleChoiceQuestion | MultipleChoiceQuestion).options.push("")
+      const choiceQuestion = newQuestions[questionIndex] as SingleChoiceQuestion | MultipleChoiceQuestion
+      choiceQuestion.options.push("")
+      choiceQuestion.optionDescriptions.push("")
       setQuestions(newQuestions)
     }
   }
 
   const removeOption = (questionIndex: number, optionIndex: number) => {
     const question = questions[questionIndex]
-    if ('options' in question) {
+    if (isChoiceQuestion(question)) {
       const newQuestions = [...questions]
       const choiceQuestion = newQuestions[questionIndex] as SingleChoiceQuestion | MultipleChoiceQuestion
       choiceQuestion.options = choiceQuestion.options.filter((_, i) => i !== optionIndex)
-      setQuestions(newQuestions)
-    }
-  }
-
-  const updateOption = (questionIndex: number, optionIndex: number, value: string) => {
-    const question = questions[questionIndex]
-    if ('options' in question) {
-      const newQuestions = [...questions]
-      const choiceQuestion = newQuestions[questionIndex] as SingleChoiceQuestion | MultipleChoiceQuestion
-      choiceQuestion.options[optionIndex] = value
+      choiceQuestion.optionDescriptions = choiceQuestion.optionDescriptions.filter((_, i) => i !== optionIndex)
       setQuestions(newQuestions)
     }
   }
@@ -245,6 +320,7 @@ export default function AdminPolls() {
       const newQuestions = [...questions];
       const currentQuestion = questions[index];
       const questionText = currentQuestion.question;
+      const description = currentQuestion.description;
 
       let newQuestion: Question;
       
@@ -252,7 +328,7 @@ export default function AdminPolls() {
         newQuestion = {
           type: 'single',
           question: questionText,
-          description: currentQuestion.description,
+          description: description,
           options: 'options' in currentQuestion ? [...currentQuestion.options] : ['', ''],
           optionDescriptions: 'optionDescriptions' in currentQuestion ? [...currentQuestion.optionDescriptions] : ['', '']
         } as SingleChoiceQuestion;
@@ -260,7 +336,7 @@ export default function AdminPolls() {
         newQuestion = {
           type: 'multiple',
           question: questionText,
-          description: currentQuestion.description,
+          description: description,
           options: 'options' in currentQuestion ? [...currentQuestion.options] : ['', ''],
           optionDescriptions: 'optionDescriptions' in currentQuestion ? [...currentQuestion.optionDescriptions] : ['', ''],
           maxChoices: 2
@@ -269,15 +345,15 @@ export default function AdminPolls() {
         newQuestion = {
           type: 'text',
           question: questionText,
-          description: currentQuestion.description,
+          description: description,
           maxLength: 500,
-          placeholder: currentQuestion.placeholder
+          placeholder: isTextQuestion(currentQuestion) ? currentQuestion.placeholder : ''
         } as TextQuestion;
       } else {
         newQuestion = {
           type: 'scale',
           question: questionText,
-          description: currentQuestion.description,
+          description: description,
           min: 1,
           max: 5,
           step: 1,
@@ -291,43 +367,38 @@ export default function AdminPolls() {
   };
 
   const renderQuestionEditor = (question: Question, index: number) => {
-    const baseFields = (
+    const commonFields = (
       <>
-        <div className="flex justify-between items-start mb-4">
-          <h3 className="text-lg">Pytanie {index + 1}</h3>
-          {index > 0 && (
-            <AnimatedButton onClick={() => removeQuestion(index)} className="bg-red-500">
-              Usuń pytanie
-            </AnimatedButton>
-          )}
-        </div>
-
-        <div className="space-y-4 mb-4">
+        <div className="space-y-4">
           <div>
+            <label className="block text-sm font-medium mb-1 sm:mb-2">Treść pytania</label>
             <input
               type="text"
               value={question.question}
               onChange={(e) => updateQuestion(index, { question: e.target.value })}
               placeholder="Treść pytania"
-              className="w-full bg-black border border-gray-800 p-2"
+              className="w-full bg-black border border-gray-800 p-2 sm:p-3 rounded-md focus:border-[#39FF14] focus:outline-none transition-colors text-sm sm:text-base"
               required
             />
           </div>
           
           <div>
+            <label className="block text-sm font-medium mb-1 sm:mb-2">Opis pytania (opcjonalnie)</label>
             <textarea
               value={question.description || ""}
               onChange={(e) => updateQuestion(index, { description: e.target.value })}
               placeholder="Opis pytania (opcjonalnie)"
-              className="w-full bg-black border border-gray-800 p-2 min-h-[80px]"
+              className="w-full bg-black border border-gray-800 p-2 sm:p-3 rounded-md focus:border-[#39FF14] focus:outline-none transition-colors text-sm sm:text-base"
+              rows={2}
             />
           </div>
 
           <div>
+            <label className="block text-sm font-medium mb-1 sm:mb-2">Typ pytania</label>
             <select
               value={question.type}
               onChange={(e) => changeQuestionType(index, e.target.value as ResponseType)}
-              className="w-full bg-black border border-gray-800 p-2"
+              className="w-full bg-black border border-gray-800 p-2 sm:p-3 rounded-md focus:border-[#39FF14] focus:outline-none transition-colors text-sm sm:text-base"
             >
               <option value="single">Jednokrotny wybór</option>
               <option value="multiple">Wielokrotny wybór</option>
@@ -339,168 +410,160 @@ export default function AdminPolls() {
       </>
     )
 
-    switch (question.type) {
-      case "single":
-      case "multiple":
-        return (
-          <div className="mb-8 p-4 border border-gray-800 rounded">
-            {baseFields}
-            
-            {question.type === "multiple" && (
-              <div className="mb-4">
-                <label className="block mb-2">Maksymalna liczba wyborów:</label>
-                <input
-                  type="number"
-                  min="1"
-                  max={question.options.length}
-                  value={question.maxChoices}
-                  onChange={(e) => updateQuestion(index, { maxChoices: parseInt(e.target.value) })}
-                  className="w-full bg-black border border-gray-800 p-2"
-                />
-              </div>
-            )}
-
-            <div className="space-y-4 mb-4">
-              {question.options.map((option, oIndex) => (
-                <div key={oIndex} className="space-y-2">
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={option}
-                      onChange={(e) => updateOption(index, oIndex, e.target.value)}
-                      placeholder={`Opcja ${oIndex + 1}`}
-                      className="flex-grow bg-black border border-gray-800 p-2"
-                      required
-                    />
-                    {oIndex > 1 && (
-                      <AnimatedButton
-                        onClick={() => removeOption(index, oIndex)}
-                        className="bg-red-500"
-                      >
-                        Usuń
-                      </AnimatedButton>
-                    )}
-                  </div>
-                  <textarea
-                    value={question.optionDescriptions?.[oIndex] || ""}
-                    onChange={(e) => {
-                      const newDescriptions = [...(question.optionDescriptions || [])]
-                      newDescriptions[oIndex] = e.target.value
-                      updateQuestion(index, { optionDescriptions: newDescriptions })
-                    }}
-                    placeholder={`Opis opcji ${oIndex + 1} (opcjonalnie)`}
-                    className="w-full bg-black border border-gray-800 p-2"
-                  />
-                </div>
-              ))}
-            </div>
-
-            <AnimatedButton
-              type="button"
-              onClick={() => addOption(index)}
-              className="w-full mb-2"
-            >
-              Dodaj opcję
-            </AnimatedButton>
-          </div>
-        )
-
-      case "text":
-        return (
-          <div className="mb-8 p-4 border border-gray-800 rounded">
-            {baseFields}
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block mb-2">Maksymalna długość odpowiedzi:</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={question.maxLength}
-                  onChange={(e) => updateQuestion(index, { maxLength: parseInt(e.target.value) })}
-                  className="w-full bg-black border border-gray-800 p-2"
-                />
-              </div>
-              <div>
-                <label className="block mb-2">Placeholder:</label>
+    if (isChoiceQuestion(question)) {
+      return (
+        <div className="space-y-4">
+          {commonFields}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium mb-1 sm:mb-2">Opcje odpowiedzi</label>
+            {question.options.map((option, optionIndex) => (
+              <div key={optionIndex} className="flex gap-2">
                 <input
                   type="text"
-                  value={question.placeholder || ""}
-                  onChange={(e) => updateQuestion(index, { placeholder: e.target.value })}
-                  placeholder="Tekst podpowiedzi dla użytkownika"
-                  className="w-full bg-black border border-gray-800 p-2"
+                  value={option}
+                  onChange={(e) => updateOption(index, optionIndex, e.target.value)}
+                  placeholder={`Opcja ${optionIndex + 1}`}
+                  className="flex-grow bg-black border border-gray-800 p-2 sm:p-3 rounded-md focus:border-[#39FF14] focus:outline-none transition-colors text-sm sm:text-base"
+                  required
                 />
+                <button
+                  type="button"
+                  onClick={() => removeOption(index, optionIndex)}
+                  className="text-red-500 hover:text-red-700 transition-colors px-2 text-sm sm:text-base"
+                >
+                  Usuń
+                </button>
               </div>
-            </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => addOption(index)}
+              className="text-[#39FF14] hover:text-[#32CC10] transition-colors text-sm sm:text-base"
+            >
+              + Dodaj opcję
+            </button>
           </div>
-        )
-
-      case "scale":
-        return (
-          <div className="mb-8 p-4 border border-gray-800 rounded">
-            {baseFields}
-            
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div>
-                <label className="block mb-2">Minimum:</label>
-                <input
-                  type="number"
-                  value={question.min}
-                  onChange={(e) => updateQuestion(index, { min: parseInt(e.target.value) })}
-                  className="w-full bg-black border border-gray-800 p-2"
-                />
-              </div>
-              <div>
-                <label className="block mb-2">Maximum:</label>
-                <input
-                  type="number"
-                  value={question.max}
-                  onChange={(e) => updateQuestion(index, { max: parseInt(e.target.value) })}
-                  className="w-full bg-black border border-gray-800 p-2"
-                />
-              </div>
-              <div>
-                <label className="block mb-2">Krok:</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={question.step}
-                  onChange={(e) => updateQuestion(index, { step: parseInt(e.target.value) })}
-                  className="w-full bg-black border border-gray-800 p-2"
-                />
-              </div>
+          {question.type === "multiple" && (
+            <div>
+              <label className="block text-sm font-medium mb-1 sm:mb-2">
+                Maksymalna liczba wyborów
+              </label>
+              <input
+                type="number"
+                value={question.maxChoices}
+                onChange={(e) => updateQuestion(index, { maxChoices: parseInt(e.target.value) })}
+                min={1}
+                max={question.options.length}
+                className="w-full sm:w-auto bg-black border border-gray-800 p-2 sm:p-3 rounded-md focus:border-[#39FF14] focus:outline-none transition-colors text-sm sm:text-base"
+              />
             </div>
-
-            <div className="mb-4">
-              <label className="block mb-2">Etykiety (opcjonalne):</label>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <input
-                    type="text"
-                    value={question.labels?.[question.min] || ""}
-                    onChange={(e) => updateQuestion(index, {
-                      labels: { ...question.labels, [question.min]: e.target.value }
-                    })}
-                    placeholder="Etykieta dla minimum"
-                    className="w-full bg-black border border-gray-800 p-2"
-                  />
-                </div>
-                <div>
-                  <input
-                    type="text"
-                    value={question.labels?.[question.max] || ""}
-                    onChange={(e) => updateQuestion(index, {
-                      labels: { ...question.labels, [question.max]: e.target.value }
-                    })}
-                    placeholder="Etykieta dla maximum"
-                    className="w-full bg-black border border-gray-800 p-2"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        )
+          )}
+        </div>
+      )
     }
+
+    if (isTextQuestion(question)) {
+      return (
+        <div className="space-y-4">
+          {commonFields}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1 sm:mb-2">
+                Maksymalna długość tekstu
+              </label>
+              <input
+                type="number"
+                value={question.maxLength}
+                onChange={(e) => updateQuestion(index, { maxLength: parseInt(e.target.value) })}
+                min={1}
+                className="w-full bg-black border border-gray-800 p-2 sm:p-3 rounded-md focus:border-[#39FF14] focus:outline-none transition-colors text-sm sm:text-base"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1 sm:mb-2">
+                Placeholder
+              </label>
+              <input
+                type="text"
+                value={question.placeholder}
+                onChange={(e) => updateQuestion(index, { placeholder: e.target.value })}
+                className="w-full bg-black border border-gray-800 p-2 sm:p-3 rounded-md focus:border-[#39FF14] focus:outline-none transition-colors text-sm sm:text-base"
+              />
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    if (isScaleQuestion(question)) {
+      return (
+        <div className="space-y-4">
+          {commonFields}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1 sm:mb-2">Min</label>
+              <input
+                type="number"
+                value={question.min}
+                onChange={(e) => updateQuestion(index, { min: parseInt(e.target.value) })}
+                className="w-full bg-black border border-gray-800 p-2 sm:p-3 rounded-md focus:border-[#39FF14] focus:outline-none transition-colors text-sm sm:text-base"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1 sm:mb-2">Max</label>
+              <input
+                type="number"
+                value={question.max}
+                onChange={(e) => updateQuestion(index, { max: parseInt(e.target.value) })}
+                className="w-full bg-black border border-gray-800 p-2 sm:p-3 rounded-md focus:border-[#39FF14] focus:outline-none transition-colors text-sm sm:text-base"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1 sm:mb-2">Krok</label>
+              <input
+                type="number"
+                value={question.step}
+                onChange={(e) => updateQuestion(index, { step: parseInt(e.target.value) })}
+                min={1}
+                className="w-full bg-black border border-gray-800 p-2 sm:p-3 rounded-md focus:border-[#39FF14] focus:outline-none transition-colors text-sm sm:text-base"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1 sm:mb-2">
+              Etykiety (opcjonalnie)
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+              {Array.from({ length: (question.max - question.min) / question.step + 1 }, (_, i) => {
+                const value = question.min + i * question.step
+                return (
+                  <div key={value} className="flex flex-col space-y-1">
+                    <span className="text-xs text-gray-400">Wartość: {value}</span>
+                    <input
+                      type="text"
+                      value={question.labels[value] || ""}
+                      onChange={(e) => {
+                        const newLabels = { ...question.labels }
+                        if (e.target.value) {
+                          newLabels[value] = e.target.value
+                        } else {
+                          delete newLabels[value]
+                        }
+                        updateQuestion(index, { labels: newLabels })
+                      }}
+                      placeholder={`Etykieta dla ${value}`}
+                      className="w-full bg-black border border-gray-800 p-2 rounded-md focus:border-[#39FF14] focus:outline-none transition-colors text-sm"
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    return null
   }
 
   const addPoll = async (e: React.FormEvent) => {
@@ -577,18 +640,34 @@ export default function AdminPolls() {
   }
 
   if (loading) {
-    return <div>Ładowanie...</div>
+    return (
+      <PageTransition>
+        <div className="container mx-auto px-4 py-8 text-center">Ładowanie...</div>
+      </PageTransition>
+    )
+  }
+
+  if (error) {
+    return (
+      <PageTransition>
+        <div className="container mx-auto px-4 py-8">
+          <div className="text-red-500 text-center">{error}</div>
+        </div>
+      </PageTransition>
+    )
   }
 
   return (
     <PageTransition>
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8 glitch">Zarządzanie Ankietami</h1>
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 max-w-7xl">
+        <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-6 sm:mb-8 glitch text-center">
+          Zarządzanie Ankietami
+        </h1>
 
-        {/* Toast Notification */}
+        {/* Toast Notification - Improved positioning for different devices */}
         {showToast && (
           <div
-            className={`fixed top-4 right-4 p-4 rounded shadow-lg transition-all duration-300 ${
+            className={`fixed top-4 right-4 p-3 sm:p-4 rounded-lg shadow-lg transition-all duration-300 z-50 text-sm sm:text-base max-w-[90vw] sm:max-w-md ${
               toastType === "success" ? "bg-green-500" : "bg-red-500"
             }`}
           >
@@ -596,153 +675,184 @@ export default function AdminPolls() {
           </div>
         )}
 
-        {!showCreator ? (
-          <AnimatedButton onClick={() => setShowCreator(true)} className="mb-8">
-            Stwórz nową ankietę
+        {/* Create Poll Button - Better spacing and sizing for mobile */}
+        <div className="mb-6 sm:mb-8">
+          <AnimatedButton 
+            onClick={() => setShowCreator(!showCreator)} 
+            className="w-full sm:w-auto text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3"
+          >
+            {showCreator ? "Ukryj kreator" : "Stwórz nową ankietę"}
           </AnimatedButton>
-        ) : (
-          <form onSubmit={addPoll} className="mb-8 neon-box p-4">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl">Kreator ankiet</h2>
-              <AnimatedButton onClick={() => setShowCreator(false)} className="bg-red-500">
-                Anuluj
-              </AnimatedButton>
-            </div>
-            
-            <div className="space-y-4 mb-6">
-              <div>
-                <label htmlFor="pollTitle" className="block mb-2">Tytuł ankiety</label>
-                <input
-                  type="text"
-                  id="pollTitle"
-                  value={pollTitle}
-                  onChange={(e) => setPollTitle(e.target.value)}
-                  className="w-full bg-black border border-gray-800 p-2"
-                  required
-                />
+        </div>
+
+        {showCreator && (
+          <div className="neon-box p-4 sm:p-6 mb-6 sm:mb-8 rounded-lg">
+            <h2 className="text-lg sm:text-xl md:text-2xl mb-4 sm:mb-6">Kreator ankiet</h2>
+            <form onSubmit={addPoll} className="space-y-4 sm:space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                <div>
+                  <label className="block text-sm font-medium mb-1 sm:mb-2">Tytuł ankiety</label>
+                  <input
+                    type="text"
+                    value={pollTitle}
+                    onChange={(e) => setPollTitle(e.target.value)}
+                    className="w-full bg-black border border-gray-800 p-2 sm:p-3 rounded-md focus:border-[#39FF14] focus:outline-none transition-colors text-sm sm:text-base"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1 sm:mb-2">Data wygaśnięcia (opcjonalnie)</label>
+                  <input
+                    type="datetime-local"
+                    value={expiresAt}
+                    onChange={(e) => setExpiresAt(e.target.value)}
+                    className="w-full bg-black border border-gray-800 p-2 sm:p-3 rounded-md focus:border-[#39FF14] focus:outline-none transition-colors text-sm sm:text-base"
+                  />
+                </div>
               </div>
 
               <div>
-                <label htmlFor="pollDescription" className="block mb-2">Opis ankiety</label>
+                <label className="block text-sm font-medium mb-1 sm:mb-2">Opis ankiety</label>
                 <textarea
-                  id="pollDescription"
                   value={pollDescription}
                   onChange={(e) => setPollDescription(e.target.value)}
-                  className="w-full bg-black border border-gray-800 p-2 min-h-[100px]"
+                  className="w-full bg-black border border-gray-800 p-2 sm:p-3 rounded-md focus:border-[#39FF14] focus:outline-none transition-colors text-sm sm:text-base"
+                  rows={3}
                   required
                 />
               </div>
 
-              <div>
-                <label htmlFor="expiresAt" className="block mb-2">Data wygaśnięcia (opcjonalnie)</label>
-                <input
-                  type="datetime-local"
-                  id="expiresAt"
-                  value={expiresAt}
-                  onChange={(e) => setExpiresAt(e.target.value)}
-                  className="w-full bg-black border border-gray-800 p-2"
-                />
+              <div className="flex flex-col sm:flex-row gap-4">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isSystemPost}
+                    onChange={(e) => setIsSystemPost(e.target.checked)}
+                    className="form-checkbox text-[#39FF14] rounded border-gray-800 focus:ring-[#39FF14]"
+                  />
+                  <span className="text-sm sm:text-base">Post systemowy</span>
+                </label>
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isActive}
+                    onChange={(e) => setIsActive(e.target.checked)}
+                    className="form-checkbox text-[#39FF14] rounded border-gray-800 focus:ring-[#39FF14]"
+                  />
+                  <span className="text-sm sm:text-base">Aktywna</span>
+                </label>
               </div>
 
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="isSystemPost"
-                  checked={isSystemPost}
-                  onChange={(e) => setIsSystemPost(e.target.checked)}
-                  className="mr-2"
-                />
-                <label htmlFor="isSystemPost">Post systemowy</label>
+              {/* Question Editor - Improved spacing and controls for mobile */}
+              <div className="space-y-4 sm:space-y-6">
+                {questions.map((question, index) => (
+                  <div key={index} className="neon-box p-4 sm:p-6 rounded-lg">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
+                      <h3 className="text-base sm:text-lg mb-2 sm:mb-0">Pytanie {index + 1}</h3>
+                      {index > 0 && (
+                        <AnimatedButton 
+                          onClick={() => removeQuestion(index)} 
+                          className="w-full sm:w-auto text-sm bg-red-500"
+                        >
+                          Usuń pytanie
+                        </AnimatedButton>
+                      )}
+                    </div>
+                    {renderQuestionEditor(question, index)}
+                  </div>
+                ))}
               </div>
 
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="isActive"
-                  checked={isActive}
-                  onChange={(e) => setIsActive(e.target.checked)}
-                  className="mr-2"
-                />
-                <label htmlFor="isActive">Aktywna</label>
+              {/* Question Type Buttons - Better layout for mobile */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+                <button
+                  type="button"
+                  onClick={() => addQuestion("single")}
+                  className="border border-[#39FF14] hover:bg-[#39FF14] hover:text-black transition-all duration-300 px-3 py-2 sm:px-4 sm:py-2 rounded-md text-sm sm:text-base"
+                >
+                  Dodaj wybór jednokrotny
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addQuestion("multiple")}
+                  className="border border-[#39FF14] hover:bg-[#39FF14] hover:text-black transition-all duration-300 px-3 py-2 sm:px-4 sm:py-2 rounded-md text-sm sm:text-base"
+                >
+                  Dodaj wybór wielokrotny
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addQuestion("text")}
+                  className="border border-[#39FF14] hover:bg-[#39FF14] hover:text-black transition-all duration-300 px-3 py-2 sm:px-4 sm:py-2 rounded-md text-sm sm:text-base"
+                >
+                  Dodaj pytanie otwarte
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addQuestion("scale")}
+                  className="border border-[#39FF14] hover:bg-[#39FF14] hover:text-black transition-all duration-300 px-3 py-2 sm:px-4 sm:py-2 rounded-md text-sm sm:text-base"
+                >
+                  Dodaj skalę
+                </button>
               </div>
-            </div>
 
-            {questions.map((q, index) => renderQuestionEditor(q, index))}
-
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <AnimatedButton type="button" onClick={() => addQuestion("single")}>
-                Dodaj pytanie jednokrotnego wyboru
-              </AnimatedButton>
-              <AnimatedButton type="button" onClick={() => addQuestion("multiple")}>
-                Dodaj pytanie wielokrotnego wyboru
-              </AnimatedButton>
-              <AnimatedButton type="button" onClick={() => addQuestion("text")}>
-                Dodaj pytanie otwarte
-              </AnimatedButton>
-              <AnimatedButton type="button" onClick={() => addQuestion("scale")}>
-                Dodaj skalę
-              </AnimatedButton>
-            </div>
-
-            <AnimatedButton type="submit" className="w-full">
-              Zapisz ankietę
-            </AnimatedButton>
-          </form>
+              {/* Submit Button - Better positioning */}
+              <div className="flex justify-end pt-4 sm:pt-6">
+                <button
+                  type="submit"
+                  className="w-full sm:w-auto bg-[#39FF14] text-black px-6 py-3 rounded-md hover:bg-[#32CC10] transition-colors text-sm sm:text-base font-medium"
+                >
+                  Utwórz ankietę
+                </button>
+              </div>
+            </form>
+          </div>
         )}
 
-        <div className="neon-box p-4">
-          <h2 className="text-xl mb-4">Lista ankiet</h2>
-          {error ? (
-            <p className="text-red-500 text-center">{error}</p>
-          ) : polls.length === 0 ? (
-            <p className="text-center text-gray-400">Brak ankiet</p>
-          ) : (
-            <div className="space-y-8">
-              {polls.map((poll) => (
-                <div key={poll.id} className="border-b border-gray-800 py-4 last:border-b-0">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="text-xl font-semibold mb-2">{poll.title}</h3>
-                      <p className="text-gray-300 mb-2">{poll.description}</p>
-                      <p className="text-sm text-gray-400">
-                        Utworzono: {new Date(poll.created_at).toLocaleDateString()}
-                      </p>
-                      {poll.expires_at && (
-                        <p className="text-sm text-gray-400">
-                          Wygasa: {new Date(poll.expires_at).toLocaleDateString()}
-                        </p>
-                      )}
-                      <p className="text-sm text-gray-400">
-                        Status: {poll.is_active ? "Aktywna" : "Nieaktywna"}
-                      </p>
-                      {pollResults[poll.id] && (
-                        <p className="text-sm text-gray-400">
-                          Liczba odpowiedzi: {pollResults[poll.id].total_votes}
-                        </p>
-                      )}
-                    </div>
-                    <div className="space-x-2">
-                      <AnimatedButton
-                        onClick={() => router.push(`/admin/polls/${poll.id}`)}
-                        className="bg-blue-500"
-                      >
-                        Statystyki
-                      </AnimatedButton>
-                      <AnimatedButton
-                        onClick={() => togglePollStatus(poll.id, poll.is_active)}
-                        className={poll.is_active ? "bg-green-500" : "bg-yellow-500"}
-                      >
-                        {poll.is_active ? "Dezaktywuj" : "Aktywuj"}
-                      </AnimatedButton>
-                      <AnimatedButton onClick={() => deletePoll(poll.id)} className="bg-red-500">
-                        Usuń
-                      </AnimatedButton>
-                    </div>
-                  </div>
-                </div>
-              ))}
+        {/* Polls Grid - Responsive layout */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          {polls.map((poll) => (
+            <div key={poll.id} className="neon-box p-4 sm:p-6 rounded-lg">
+              <div className="flex justify-between items-start mb-3 sm:mb-4">
+                <h3 className="text-base sm:text-lg font-semibold line-clamp-2 flex-1 mr-2">{poll.title}</h3>
+                <button
+                  onClick={() => deletePoll(poll.id)}
+                  className="text-red-500 hover:text-red-700 transition-colors text-sm sm:text-base shrink-0"
+                >
+                  Usuń
+                </button>
+              </div>
+              <p className="text-gray-300 mb-3 sm:mb-4 line-clamp-3 text-sm sm:text-base">{poll.description}</p>
+              <div className="space-y-1 sm:space-y-2 text-xs sm:text-sm text-gray-400">
+                <p>Liczba pytań: {poll.questions.length}</p>
+                <p>Liczba odpowiedzi: {pollResults[poll.id]?.total_votes || 0}</p>
+                <p>
+                  Status:{" "}
+                  <span className={poll.is_active ? "text-green-500" : "text-red-500"}>
+                    {poll.is_active ? "Aktywna" : "Nieaktywna"}
+                  </span>
+                </p>
+                {poll.expires_at && (
+                  <p className="truncate">
+                    Wygasa: {new Date(poll.expires_at).toLocaleString("pl-PL")}
+                  </p>
+                )}
+              </div>
+              <div className="mt-4 space-y-2">
+                <button
+                  onClick={() => togglePollStatus(poll.id, !poll.is_active)}
+                  className="w-full border border-[#39FF14] hover:bg-[#39FF14] hover:text-black transition-all duration-300 px-3 py-2 sm:px-4 sm:py-2 rounded-md text-sm"
+                >
+                  {poll.is_active ? "Dezaktywuj" : "Aktywuj"}
+                </button>
+                <button
+                  onClick={() => router.push(`/admin/polls/${poll.id}`)}
+                  className="w-full border border-[#39FF14] hover:bg-[#39FF14] hover:text-black transition-all duration-300 px-3 py-2 sm:px-4 sm:py-2 rounded-md text-sm"
+                >
+                  Zobacz wyniki
+                </button>
+              </div>
             </div>
-          )}
+          ))}
         </div>
       </div>
     </PageTransition>

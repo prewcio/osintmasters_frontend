@@ -4,86 +4,67 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
 
-export default function Navbar({ activeVotes }: { activeVotes: number }) {
-  const pathname = usePathname()
+export default function Navbar() {
+  const pathname = usePathname() || ""
   const { user } = useAuth()
 
-  const isAdmin = user?.role === "admin"
+  const isActive = (path: string) => {
+    return pathname === path
+  }
+
+  const navItems = [
+    { path: "/dashboard", label: "DASHBOARD" },
+    { path: "/dashboard/aktualnosci", label: "AKTUALNOŚCI" },
+    { path: "/dashboard/ankiety", label: "ANKIETY" },
+    { path: "/dashboard/materialy", label: "MATERIAŁY" },
+    { path: "/dashboard/meetings", label: "SPOTKANIA" },
+  ]
 
   return (
-    <div className="bg-black border-b border-gray-800">
-      <div className="container mx-auto px-4">
-        <h1 className="text-4xl font-bold text-white text-center py-6 glitch">OSINT MASTERS</h1>
-        <nav className="flex justify-center pb-4">
-          <ul className="flex space-x-8 text-gray-400">
-            <li>
+    <nav className="bg-black border-b border-gray-800">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex flex-col sm:flex-row items-center justify-between h-auto sm:h-16">
+          {/* Logo/Brand - Hidden on mobile when menu is open */}
+          <div className="flex items-center py-4 sm:py-0">
+            <Link 
+              href="/dashboard" 
+              className="text-xl sm:text-2xl font-bold glitch hover:text-[#39FF14] transition-colors"
+            >
+              OSINT MASTERS
+            </Link>
+          </div>
+
+          {/* Navigation Links - Responsive menu */}
+          <div className="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-8 pb-4 sm:pb-0 w-full sm:w-auto">
+            {navItems.map((item) => (
               <Link
-                href="/dashboard"
-                className={`hover:text-white transition-colors ${pathname === "/dashboard" ? "text-[#39FF14]" : ""}`}
+                key={item.path}
+                href={item.path}
+                className={`text-sm sm:text-base font-medium transition-colors hover:text-[#39FF14] ${
+                  isActive(item.path)
+                    ? "text-[#39FF14]"
+                    : "text-gray-300"
+                }`}
               >
-                HOME
+                {item.label}
               </Link>
-            </li>
-            <li>
+            ))}
+            {user?.role === "admin" && (
               <Link
-                href="/dashboard/aktualnosci"
-                className={`hover:text-white transition-colors ${pathname === "/dashboard/aktualnosci" ? "text-[#39FF14]" : ""}`}
+                href="/admin"
+                className={`text-sm sm:text-base font-medium transition-colors hover:text-[#39FF14] ${
+                  pathname.startsWith("/admin")
+                    ? "text-[#39FF14]"
+                    : "text-gray-300"
+                }`}
               >
-                AKTUALNOŚCI
+                ADMIN
               </Link>
-            </li>
-            <li>
-              <Link
-                href="/dashboard/ankiety"
-                className={`hover:text-white transition-colors flex items-center ${pathname === "/dashboard/ankiety" ? "text-[#39FF14]" : ""}`}
-              >
-                ANKIETY
-                {activeVotes > 0 && <span className="ml-2 text-[#39FF14] animate-pulse">{activeVotes}</span>}
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="/dashboard/materialy"
-                className={`hover:text-white transition-colors ${pathname === "/dashboard/materialy" ? "text-[#39FF14]" : ""}`}
-              >
-                MATERIAŁY
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="/dashboard/chat"
-                className={`hover:text-white transition-colors ${pathname === "/dashboard/chat" ? "text-[#39FF14]" : ""}`}
-              >
-                CHAT
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="/dashboard/settings"
-                className={`hover:text-white transition-colors ${pathname === "/dashboard/settings" ? "text-[#39FF14]" : ""}`}
-              >
-                USTAWIENIA
-              </Link>
-            </li>
-            {isAdmin && (
-              <li>
-                <Link
-                  href="/admin"
-                  className={`hover:text-white transition-colors ${pathname.startsWith("/admin") ? "text-[#39FF14]" : ""}`}
-                >
-                  ADMIN
-                </Link>
-              </li>
             )}
-            <li>
-              <Link href="/" className="hover:text-white transition-colors">
-                WYLOGUJ
-              </Link>
-            </li>
-          </ul>
-        </nav>
+          </div>
+        </div>
       </div>
-    </div>
+    </nav>
   )
 }
 

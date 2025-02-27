@@ -37,8 +37,8 @@ export default function Ankiety() {
     const fetchPolls = async () => {
       try {
         setLoading(true)
-        const response = await api.get<{ polls: Poll[] }>("/api/votes/active")
-        setPolls(response.data.polls)
+        const response = await api.get<Poll[]>("/api/votes")
+        setPolls(response.data)
       } catch (err) {
         console.error("Failed to fetch polls:", err)
         setError("Nie udało się załadować ankiet. Spróbuj ponownie później.")
@@ -76,27 +76,27 @@ export default function Ankiety() {
 
   return (
     <PageTransition>
-      <div className="max-w-4xl mx-auto px-4">
-        <h1 className="text-3xl font-bold mb-8 glitch text-center">ANKIETY</h1>
+      <div className="container mx-auto px-4 py-6 max-w-7xl">
+        <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-8 glitch text-center">ANKIETY</h1>
 
         <div className="mb-6 space-y-4">
           {/* Search bar */}
-          <div className="relative">
+          <div className="relative max-w-2xl mx-auto">
             <input
               type="text"
               placeholder="Szukaj ankiet..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-black border border-gray-800 p-3 pl-10 focus:border-[#39FF14] focus:outline-none transition-colors"
+              className="w-full bg-black border border-gray-800 p-3 pl-10 rounded-lg focus:border-[#39FF14] focus:outline-none transition-colors"
             />
             <span className="absolute left-3 top-3 text-gray-400">🔍</span>
           </div>
 
           {/* Filters */}
-          <div className="flex justify-center space-x-4">
+          <div className="flex flex-wrap justify-center gap-4">
             <button
               onClick={() => setFilter("all")}
-              className={`px-4 py-2 border ${
+              className={`px-4 py-2 border rounded-md ${
                 filter === "all"
                   ? "border-[#39FF14] text-[#39FF14]"
                   : "border-gray-800 text-gray-400 hover:border-[#39FF14] hover:text-[#39FF14]"
@@ -106,7 +106,7 @@ export default function Ankiety() {
             </button>
             <button
               onClick={() => setFilter("active")}
-              className={`px-4 py-2 border ${
+              className={`px-4 py-2 border rounded-md ${
                 filter === "active"
                   ? "border-[#39FF14] text-[#39FF14]"
                   : "border-gray-800 text-gray-400 hover:border-[#39FF14] hover:text-[#39FF14]"
@@ -116,7 +116,7 @@ export default function Ankiety() {
             </button>
             <button
               onClick={() => setFilter("expired")}
-              className={`px-4 py-2 border ${
+              className={`px-4 py-2 border rounded-md ${
                 filter === "expired"
                   ? "border-[#39FF14] text-[#39FF14]"
                   : "border-gray-800 text-gray-400 hover:border-[#39FF14] hover:text-[#39FF14]"
@@ -126,7 +126,7 @@ export default function Ankiety() {
             </button>
             <button
               onClick={() => setFilter("system")}
-              className={`px-4 py-2 border ${
+              className={`px-4 py-2 border rounded-md ${
                 filter === "system"
                   ? "border-[#39FF14] text-[#39FF14]"
                   : "border-gray-800 text-gray-400 hover:border-[#39FF14] hover:text-[#39FF14]"
@@ -137,20 +137,20 @@ export default function Ankiety() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {loading ? (
-            <div className="text-center">Ładowanie...</div>
+            <div className="col-span-full text-center py-8">Ładowanie...</div>
           ) : error ? (
-            <div className="text-red-500 text-center">{error}</div>
+            <div className="col-span-full text-red-500 text-center py-8">{error}</div>
           ) : filteredPolls.length === 0 ? (
-            <p className="text-center text-gray-400">
+            <p className="col-span-full text-center text-gray-400 py-8">
               {searchQuery
                 ? "Nie znaleziono ankiet spełniających kryteria wyszukiwania"
                 : "Brak dostępnych ankiet"}
             </p>
           ) : (
             filteredPolls.map((poll) => (
-              <div key={poll.id} className="neon-box p-6">
+              <div key={poll.id} className="neon-box p-6 rounded-lg transition-all hover:shadow-lg hover:scale-102">
                 {poll.is_system_post && (
                   <div className="mb-2">
                     <span className="bg-blue-500 text-white text-xs px-2 py-1 rounded">
@@ -158,22 +158,22 @@ export default function Ankiety() {
                     </span>
                   </div>
                 )}
-                <h3 className="text-xl font-semibold mb-2">{poll.title}</h3>
-                <p className="text-gray-300 mb-4">{poll.description}</p>
-                <div className="flex flex-wrap gap-4 text-sm text-gray-400 mb-4">
-                  <p>
+                <h3 className="text-xl font-semibold mb-2 line-clamp-2">{poll.title}</h3>
+                <p className="text-gray-300 mb-4 line-clamp-3">{poll.description}</p>
+                <div className="flex flex-wrap gap-3 text-sm text-gray-400 mb-4">
+                  <p className="whitespace-nowrap">
                     Utworzono: {new Date(poll.created_at).toLocaleString("pl-PL")}
                   </p>
                   {poll.expires_at && (
-                    <p>
+                    <p className="whitespace-nowrap">
                       Wygasa: {new Date(poll.expires_at).toLocaleString("pl-PL")}
                     </p>
                   )}
                   <p>Liczba pytań: {poll.questions.length}</p>
                   <p>Oddanych głosów: {poll.total_votes}</p>
                 </div>
-                <div className="flex justify-between items-center">
-                  <div className="space-x-2">
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                  <div>
                     {poll.has_voted ? (
                       <span className="text-green-500">✓ Oddano głos</span>
                     ) : (
@@ -186,7 +186,7 @@ export default function Ankiety() {
                         ? `/dashboard/vote-results/${poll.id}`
                         : `/dashboard/vote/${poll.id}`
                     )}
-                    disabled={!poll.active || (poll.expires_at && new Date(poll.expires_at) < new Date())}
+                    disabled={!poll.active || (poll.expires_at ? new Date(poll.expires_at) < new Date() : false)}
                   >
                     {poll.has_voted ? "Zobacz odpowiedzi" : "Zagłosuj"}
                   </AnimatedButton>

@@ -11,13 +11,14 @@ import type { Types } from 'ably'
 import Ably from "ably/promises"
 import { NextResponse } from "next/server"
 
-type Message = {
+interface Message {
   id: number
-  user_id: number
-  name: string
   content: string
+  sender: {
+    id: number
+    name: string
+  }
   created_at: string
-  updated_at: string
 }
 
 type AblyMessage = Types.Message & {
@@ -55,93 +56,56 @@ const configureAblyClient = async () => {
 export default function LiveChat() {
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
-  const { user } = useAuth()
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const [memberCount, setMemberCount] = useState(0)
+  const { user } = useAuth()
 
   useEffect(() => {
-    const setupAbly = async () => {
-      const { authUrl, clientId } = await configureAblyClient();
-      configureAbly({
-        authUrl,
-        clientId,
-      });
-    };
-
-    if (user) {
-      setupAbly();
-    }
-  }, [user]);
-
-  // Subscribe to Ably channel
-  const [channel] = useChannel(CHAT_CHANNEL, (message) => {
-    const ablyMessage = message as AblyMessage
-    const newMessage: Message = {
-      id: Date.now(), // Use timestamp as temporary ID
-      user_id: ablyMessage.data.user.id,
-      name: ablyMessage.data.user.name,
-      content: ablyMessage.data.content,
-      created_at: new Date(ablyMessage.timestamp).toISOString(),
-      updated_at: new Date(ablyMessage.timestamp).toISOString()
-    }
-    setMessages(prev => [...prev, newMessage])
-  })
-
-  // Track presence
-  const [presenceData] = usePresence(CHAT_CHANNEL, {
-    user: user ? { id: user.id, name: user.name } : null
-  })
+    fetchMessages()
+    const interval = setInterval(fetchMessages, 5000)
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
-    if (presenceData) {
-      setMemberCount(presenceData.length)
-    }
-  }, [presenceData])
-
-  useEffect(() => {
-    if (user) {
-      fetchMessages()
-    }
-  }, [user])
-
-  useEffect(() => {
-    if (messages.length > 0) {
-      scrollToBottom()
-    }
+    scrollToBottom()
   }, [messages])
 
   const fetchMessages = async () => {
     try {
-      const response = await api.get<Message[]>("/api/chat/messages")
-      setMessages(response.data)
-      scrollToBottom()
-    } catch (error) {
-      console.error("Failed to fetch messages:", error)
+      const response = await fetch("/api/chat")
+      if (!response.ok) throw new Error("Failed to fetch messages")
+      const data = await response.json()
+      setMessages(data)
+      setError(null)
+    } catch (err) {
+      console.error("Error fetching messages:", err)
+      setError("Nie udało się załadować wiadomości")
+    } finally {
+      setIsLoading(false)
     }
   }
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!user || !newMessage.trim()) return
+    if (!newMessage.trim()) return
 
     try {
-      // Store in backend first
-      const response = await api.post<Message>("/api/chat/messages", {
-        content: newMessage.trim()
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: newMessage }),
       })
 
-      // Then publish to Ably if backend save was successful
-      await channel.publish("message", {
-        content: newMessage.trim(),
-        user: {
-          id: user.id,
-          name: user.name
-        }
-      })
+      if (!response.ok) throw new Error("Failed to send message")
 
+      const message = await response.json()
+      setMessages([...messages, message])
       setNewMessage("")
-    } catch (error) {
-      console.error("Error sending message:", error)
+      setError(null)
+    } catch (err) {
+      console.error("Error sending message:", err)
+      setError("Nie udało się wysłać wiadomości")
     }
   }
 
@@ -149,52 +113,93 @@ export default function LiveChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }
 
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleTimeString("pl-PL", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+
   if (!user) {
     return (
-      <div className="neon-box p-4 flex items-center justify-center">
-        <p>Please log in to access the chat.</p>
+      <div className="flex items-center justify-center h-full">
+        <p className="text-gray-400">Zaloguj się, aby korzystać z czatu</p>
       </div>
     )
   }
 
   return (
-    <div className="neon-box p-4 h-[calc(100vh-200px)] flex flex-col">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl">Live Chat</h2>
-        <span className="text-sm text-gray-400">
-          {memberCount} {memberCount === 1 ? 'user' : 'users'} online
-        </span>
+    <div className="flex flex-col h-full bg-black/50 rounded-lg overflow-hidden">
+      {/* Chat Header */}
+      <div className="flex items-center justify-between px-4 py-3 bg-black/50 border-b border-gray-800">
+        <h2 className="text-sm sm:text-base font-medium">Live Chat</h2>
+        <span className="text-xs sm:text-sm text-green-500">Online</span>
       </div>
-      <div className="flex-grow overflow-y-auto mb-4">
-        {messages.map((message) => (
-          <div 
-            key={message.id} 
-            className={`mb-2 flex items-start ${message.user_id === user.id ? 'justify-end' : 'justify-start'}`}
-          >
-            <div className={`max-w-[70%] ${message.user_id === user.id ? 'bg-[#39FF14]/10' : 'bg-gray-800/50'} p-2 rounded`}>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="font-bold text-sm">{message.name}</span>
-                <span className="text-gray-500 text-xs">
-                  {new Date(message.created_at).toLocaleString()}
-                </span>
-              </div>
-              <span className="break-words">{message.content}</span>
-            </div>
+
+      {/* Messages Container */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-[#39FF14]" />
           </div>
-        ))}
+        ) : error ? (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-red-500 text-sm sm:text-base">{error}</p>
+          </div>
+        ) : messages.length === 0 ? (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-gray-400 text-sm sm:text-base">Brak wiadomości</p>
+          </div>
+        ) : (
+          messages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex flex-col ${
+                message.sender.id === user.id ? "items-end" : "items-start"
+              }`}
+            >
+              <div
+                className={`max-w-[80%] sm:max-w-[70%] rounded-lg p-3 ${
+                  message.sender.id === user.id
+                    ? "bg-[#39FF14]/10 text-[#39FF14]"
+                    : "bg-gray-800 text-white"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="font-medium text-xs sm:text-sm">
+                    {message.sender.name}
+                  </span>
+                  <span className="text-xs text-gray-400">
+                    {formatDate(message.created_at)}
+                  </span>
+                </div>
+                <p className="text-sm sm:text-base break-words">{message.content}</p>
+              </div>
+            </div>
+          ))
+        )}
         <div ref={messagesEndRef} />
       </div>
-      <form onSubmit={sendMessage} className="flex gap-2">
-        <input
-          type="text"
-          value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-          className="flex-grow bg-black border border-gray-800 p-2 rounded focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] transition-colors outline-none"
-          placeholder="Type your message..."
-        />
-        <AnimatedButton type="submit" disabled={!newMessage.trim()}>
-          Send
-        </AnimatedButton>
+
+      {/* Message Input */}
+      <form onSubmit={sendMessage} className="p-4 border-t border-gray-800">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            placeholder="Napisz wiadomość..."
+            className="flex-1 bg-black border border-gray-800 rounded-lg px-3 py-2 text-sm sm:text-base focus:outline-none focus:border-[#39FF14] transition-colors"
+          />
+          <AnimatedButton
+            type="submit"
+            disabled={!newMessage.trim()}
+            className="px-4 py-2 text-sm sm:text-base"
+          >
+            Wyślij
+          </AnimatedButton>
+        </div>
       </form>
     </div>
   )

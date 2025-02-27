@@ -1,231 +1,146 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
+import { Document, Page, pdfjs } from "react-pdf"
 import AnimatedButton from "./animated-button"
 import api from "@/lib/axios"
 
-type FileViewerProps = {
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`
+
+interface FileViewerProps {
   src: string
   title: string
   fileType: string
 }
 
 export default function FileViewer({ src, title, fileType }: FileViewerProps) {
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-  const [previewContent, setPreviewContent] = useState<string | null>(null)
+  const [numPages, setNumPages] = useState<number | null>(null)
+  const [pageNumber, setPageNumber] = useState(1)
   const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
-  const getFileIcon = () => {
-    switch (fileType.toLowerCase()) {
-      case "pdf":
-        return "📄"
-      case "doc":
-      case "docx":
-        return "📝"
-      case "xls":
-      case "xlsx":
-        return "📊"
-      case "txt":
-        return "📋"
-      default:
-        return "📁"
-    }
+  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
+    setNumPages(numPages)
+    setIsLoading(false)
   }
 
-  const getFileTypeName = () => {
-    switch (fileType.toLowerCase()) {
-      case "pdf":
-        return "PDF"
-      case "doc":
-      case "docx":
-        return "Dokument Word"
-      case "xls":
-      case "xlsx":
-        return "Arkusz Excel"
-      case "txt":
-        return "Plik tekstowy"
-      default:
-        return "Plik"
-    }
+  const onDocumentLoadError = (error: Error) => {
+    console.error("Error loading PDF:", error)
+    setError("Nie udało się załadować pliku PDF")
+    setIsLoading(false)
   }
 
-  // Ensure the URL is properly formatted and encoded
-  const getFileUrl = () => {
-    if (src.startsWith('http')) {
-      return src
-    }
-    // Remove any leading slashes
-    const cleanPath = src.replace(/^\/+/, '')
-    return `${api.defaults.baseURL}/${cleanPath}`
+  const goToPrevPage = () => {
+    setPageNumber((prev) => Math.max(prev - 1, 1))
   }
 
-  const fetchTextContent = async () => {
-    try {
-      setError(null)
-      const response = await api.get(src)
-      setPreviewContent(response.data)
-    } catch (err) {
-      console.error('Failed to fetch text content:', err)
-      setError('Nie udało się załadować zawartości pliku.')
-    }
+  const goToNextPage = () => {
+    setPageNumber((prev) => Math.min(prev + 1, numPages || 1))
   }
 
-  useEffect(() => {
-    if (isPreviewOpen && fileType.toLowerCase() === 'txt') {
-      fetchTextContent()
-    }
-  }, [isPreviewOpen, fileType, src])
+  const renderFilePreview = () => {
+    const fileTypeLower = fileType.toLowerCase()
 
-  const renderPreview = () => {
-    if (error) {
+    if (fileTypeLower === "pdf") {
       return (
-        <div className="flex flex-col items-center justify-center h-full">
-          <div className="text-6xl mb-4">⚠️</div>
-          <p className="text-red-500 mb-4">{error}</p>
-          <a
-            href={getFileUrl()}
-            download
-            className="text-[#39FF14] hover:underline text-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            Pobierz plik
-          </a>
+        <div className="flex flex-col items-center">
+          <div className="w-full max-w-full overflow-auto bg-black/50 rounded-lg p-2 sm:p-4">
+            <Document
+              file={src}
+              onLoadSuccess={onDocumentLoadSuccess}
+              onLoadError={onDocumentLoadError}
+              loading={
+                <div className="flex justify-center items-center h-[200px] sm:h-[300px] text-gray-400">
+                  Ładowanie...
+                </div>
+              }
+              error={
+                <div className="flex justify-center items-center h-[200px] sm:h-[300px] text-red-500">
+                  {error || "Błąd ładowania pliku"}
+                </div>
+              }
+            >
+              <Page
+                pageNumber={pageNumber}
+                renderTextLayer={false}
+                renderAnnotationLayer={false}
+                className="max-w-full"
+                width={Math.min(window.innerWidth - 48, 800)}
+              />
+            </Document>
+          </div>
+          {numPages && numPages > 1 && (
+            <div className="flex items-center justify-center space-x-4 mt-4">
+              <AnimatedButton
+                onClick={goToPrevPage}
+                disabled={pageNumber <= 1}
+                className="text-sm sm:text-base"
+              >
+                Poprzednia
+              </AnimatedButton>
+              <span className="text-sm sm:text-base">
+                Strona {pageNumber} z {numPages}
+              </span>
+              <AnimatedButton
+                onClick={goToNextPage}
+                disabled={pageNumber >= (numPages || 1)}
+                className="text-sm sm:text-base"
+              >
+                Następna
+              </AnimatedButton>
+            </div>
+          )}
         </div>
       )
     }
 
-    const fileUrl = getFileUrl()
-
-    switch (fileType.toLowerCase()) {
-      case "pdf":
-        return (
-          <div className="relative w-full h-full bg-white">
-            <embed
-              src={`${fileUrl}#toolbar=0&navpanes=0`}
-              type="application/pdf"
-              className="w-full h-full"
-            />
-            <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-75 p-4 flex justify-center">
-              <a
-                href={fileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#39FF14] hover:underline mr-4"
-                onClick={(e) => e.stopPropagation()}
-              >
-                Otwórz w nowej karcie
-              </a>
-              <a
-                href={fileUrl}
-                download
-                className="text-[#39FF14] hover:underline"
-                onClick={(e) => e.stopPropagation()}
-              >
-                Pobierz PDF
-              </a>
+    if (["jpg", "jpeg", "png", "gif"].includes(fileTypeLower)) {
+      return (
+        <div className="relative w-full aspect-video bg-black/50 rounded-lg overflow-hidden">
+          <img
+            src={src}
+            alt={title}
+            className="w-full h-full object-contain"
+            onLoad={() => setIsLoading(false)}
+            onError={() => {
+              setError("Nie udało się załadować obrazu")
+              setIsLoading(false)
+            }}
+          />
+          {isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+              Ładowanie...
             </div>
-          </div>
-        )
-      case "txt":
-        return (
-          <div className="relative w-full h-full">
-            <div className="w-full h-full overflow-auto bg-black text-white p-4 font-mono">
-              {previewContent ? (
-                <pre className="whitespace-pre-wrap">{previewContent}</pre>
-              ) : (
-                <div className="flex justify-center items-center h-full">
-                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-[#39FF14]"></div>
-                </div>
-              )}
+          )}
+          {error && (
+            <div className="absolute inset-0 flex items-center justify-center text-red-500">
+              {error}
             </div>
-            <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-75 p-4 flex justify-center">
-              <a
-                href={fileUrl}
-                download
-                className="text-[#39FF14] hover:underline"
-                onClick={(e) => e.stopPropagation()}
-              >
-                Pobierz plik
-              </a>
-            </div>
-          </div>
-        )
-      default:
-        return (
-          <div className="flex flex-col items-center justify-center h-full">
-            <div className="text-8xl mb-6">{getFileIcon()}</div>
-            <p className="text-xl mb-4">{title}</p>
-            <p className="text-gray-400 mb-6">
-              Ten typ pliku ({getFileTypeName()}) nie może być wyświetlony bezpośrednio w przeglądarce.
-            </p>
-            <a
-              href={fileUrl}
-              download
-              className="text-[#39FF14] hover:underline text-lg"
-              onClick={(e) => e.stopPropagation()}
-            >
-              Pobierz plik
-            </a>
-          </div>
-        )
+          )}
+        </div>
+      )
     }
-  }
 
-  const handlePreviewClick = () => {
-    setError(null)
-    setPreviewContent(null)
-    setIsPreviewOpen(true)
+    return (
+      <div className="flex items-center justify-center p-4 sm:p-6 bg-black/50 rounded-lg">
+        <AnimatedButton
+          onClick={() => window.open(src, "_blank")}
+          className="text-sm sm:text-base"
+        >
+          Pobierz plik
+        </AnimatedButton>
+      </div>
+    )
   }
 
   return (
-    <>
-      <div className="text-center">
-        <div className="text-6xl mb-4">{getFileIcon()}</div>
-        <p className="text-lg mb-2">{title}</p>
-        <p className="text-gray-400 mb-4">{getFileTypeName()}</p>
-        <div className="space-x-4">
-          <AnimatedButton onClick={handlePreviewClick}>
-            Podgląd
-          </AnimatedButton>
-          <a
-            href={getFileUrl()}
-            download
-            onClick={(e) => e.stopPropagation()}
-            className="inline-block bg-black text-white border border-[#39FF14] hover:bg-[#39FF14] hover:text-black transition-all duration-300 px-8 py-3"
-          >
-            Pobierz
-          </a>
-        </div>
+    <div className="w-full">
+      <div className="flex items-center justify-between mb-2 sm:mb-4">
+        <h3 className="text-sm sm:text-base font-medium truncate mr-2">{title}</h3>
+        <span className="text-xs sm:text-sm text-gray-400 uppercase">{fileType}</span>
       </div>
-
-      {isPreviewOpen && (
-        <div 
-          className="fixed inset-0 z-50 bg-black bg-opacity-90 flex items-center justify-center p-4"
-          onClick={() => setIsPreviewOpen(false)}
-        >
-          <div 
-            className="bg-gray-900 w-full max-w-6xl h-[90vh] rounded-lg shadow-xl overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center p-4 border-b border-gray-800">
-              <h3 className="text-lg font-semibold flex items-center">
-                <span className="mr-2">{getFileIcon()}</span>
-                {title}
-              </h3>
-              <button
-                onClick={() => setIsPreviewOpen(false)}
-                className="text-gray-400 hover:text-white text-2xl"
-              >
-                ×
-              </button>
-            </div>
-            <div className="h-[calc(90vh-64px)]">
-              {renderPreview()}
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+      {renderFilePreview()}
+    </div>
   )
 }
 

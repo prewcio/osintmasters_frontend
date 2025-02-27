@@ -21,21 +21,6 @@ type Material = {
   }
 }
 
-type PaginatedResponse<T> = {
-  current_page: number
-  data: T[]
-  first_page_url: string
-  from: number | null
-  last_page: number
-  last_page_url: string
-  next_page_url: string | null
-  path: string
-  per_page: number
-  prev_page_url: string | null
-  to: number | null
-  total: number
-}
-
 export default function Materialy() {
   const [materials, setMaterials] = useState<Material[]>([])
   const [loading, setLoading] = useState(true)
@@ -48,8 +33,8 @@ export default function Materialy() {
     const fetchMaterials = async () => {
       try {
         setLoading(true)
-        const response = await api.get<PaginatedResponse<Material>>("/api/materials")
-        setMaterials(response.data.data || [])
+        const response = await api.get<Material[]>("/api/materials")
+        setMaterials(response.data || [])
       } catch (err) {
         console.error("Failed to fetch materials:", err)
         setError("Nie udało się załadować materiałów. Spróbuj ponownie później.")
@@ -81,27 +66,27 @@ export default function Materialy() {
 
   return (
     <PageTransition>
-      <div className="max-w-4xl mx-auto px-4">
-        <h1 className="text-3xl font-bold mb-8 glitch text-center">MATERIAŁY</h1>
+      <div className="container mx-auto px-4 py-6 max-w-7xl">
+        <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-8 glitch text-center">MATERIAŁY</h1>
 
         <div className="mb-6 space-y-4">
           {/* Search bar */}
-          <div className="relative">
+          <div className="relative max-w-2xl mx-auto">
             <input
               type="text"
               placeholder="Szukaj materiałów..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-black border border-gray-800 p-3 pl-10 focus:border-[#39FF14] focus:outline-none transition-colors"
+              className="w-full bg-black border border-gray-800 p-3 pl-10 rounded-lg focus:border-[#39FF14] focus:outline-none transition-colors"
             />
             <span className="absolute left-3 top-3 text-gray-400">🔍</span>
           </div>
 
           {/* Type filters */}
-          <div className="flex justify-center space-x-4">
+          <div className="flex flex-wrap justify-center gap-4">
             <button
               onClick={() => setSelectedType("all")}
-              className={`px-4 py-2 border ${
+              className={`px-4 py-2 border rounded-md ${
                 selectedType === "all"
                   ? "border-[#39FF14] text-[#39FF14]"
                   : "border-gray-800 text-gray-400 hover:border-[#39FF14] hover:text-[#39FF14]"
@@ -111,7 +96,7 @@ export default function Materialy() {
             </button>
             <button
               onClick={() => setSelectedType("video")}
-              className={`px-4 py-2 border ${
+              className={`px-4 py-2 border rounded-md ${
                 selectedType === "video"
                   ? "border-[#39FF14] text-[#39FF14]"
                   : "border-gray-800 text-gray-400 hover:border-[#39FF14] hover:text-[#39FF14]"
@@ -121,7 +106,7 @@ export default function Materialy() {
             </button>
             <button
               onClick={() => setSelectedType("file")}
-              className={`px-4 py-2 border ${
+              className={`px-4 py-2 border rounded-md ${
                 selectedType === "file"
                   ? "border-[#39FF14] text-[#39FF14]"
                   : "border-gray-800 text-gray-400 hover:border-[#39FF14] hover:text-[#39FF14]"
@@ -132,13 +117,13 @@ export default function Materialy() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {loading ? (
-            <div className="text-center">Ładowanie...</div>
+            <div className="col-span-full text-center py-8">Ładowanie...</div>
           ) : error ? (
-            <div className="text-red-500 text-center">{error}</div>
+            <div className="col-span-full text-red-500 text-center py-8">{error}</div>
           ) : filteredMaterials.length === 0 ? (
-            <p className="text-center text-gray-400">
+            <p className="col-span-full text-center text-gray-400 py-8">
               {searchQuery
                 ? "Nie znaleziono materiałów spełniających kryteria wyszukiwania"
                 : selectedType === "all"
@@ -149,8 +134,8 @@ export default function Materialy() {
             </p>
           ) : (
             filteredMaterials.map((material) => (
-              <div key={material.id} className="neon-box p-4">
-                <h3 className="text-lg font-semibold mb-4">{material.title}</h3>
+              <div key={material.id} className="neon-box p-6 rounded-lg transition-all hover:shadow-lg hover:scale-102">
+                <h3 className="text-lg font-semibold mb-4 line-clamp-2">{material.title}</h3>
                 {material.type === "video" ? (
                   <div className="aspect-video mb-4">
                     <VideoPlayer
@@ -164,9 +149,9 @@ export default function Materialy() {
                     fileType={material.file_type}
                   />
                 )}
-                <div className="text-sm text-gray-400">
+                <div className="text-sm text-gray-400 mt-4">
                   {material.creator && (
-                    <p>Dodane przez: {material.creator.name}</p>
+                    <p className="mb-1">Dodane przez: {material.creator.name}</p>
                   )}
                   <p>
                     Data dodania:{" "}

@@ -21,21 +21,6 @@ type NewsItem = {
   is_system_post: boolean
 }
 
-type PaginatedResponse<T> = {
-  current_page: number
-  data: T[]
-  first_page_url: string
-  from: number | null
-  last_page: number
-  last_page_url: string
-  next_page_url: string | null
-  path: string
-  per_page: number
-  prev_page_url: string | null
-  to: number | null
-  total: number
-}
-
 export default function News() {
   const [news, setNews] = useState<NewsItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -48,8 +33,8 @@ export default function News() {
 
   const fetchNews = async () => {
     try {
-      const response = await api.get<PaginatedResponse<NewsItem>>("/api/news")
-      setNews(response.data.data || [])
+      const response = await api.get<NewsItem[]>("/api/news")
+      setNews(response.data || [])
     } catch (error: any) {
       console.error("Failed to fetch news:", error)
       setError(error.response?.data?.message || "Failed to load news")
@@ -66,30 +51,44 @@ export default function News() {
 
   return (
     <PageTransition>
-      <div className="container mx-auto px-4">
-        <h2 className="text-center text-xl mb-6 glitch">WSZYSTKIE AKTUALNOŚCI</h2>
-        <div className="space-y-4">
+      <div className="container mx-auto px-4 py-6 max-w-7xl">
+        <h2 className="text-center text-2xl md:text-3xl lg:text-4xl mb-8 glitch">WSZYSTKIE AKTUALNOŚCI</h2>
+        <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
           {loading ? (
-            <p className="text-center">Loading...</p>
+            <div className="col-span-full">
+              <p className="text-center">Loading...</p>
+            </div>
           ) : error ? (
-            <p className="text-center text-red-500">{error}</p>
+            <div className="col-span-full">
+              <p className="text-center text-red-500">{error}</p>
+            </div>
           ) : news.length === 0 ? (
-            <p className="text-center text-gray-400">Brak danych</p>
+            <div className="col-span-full">
+              <p className="text-center text-gray-400">Brak danych</p>
+            </div>
           ) : (
             news.map((item) => (
-              <div key={item.id} className="border border-gray-800 p-4 neon-box">
-                <p className="mb-2">{item.content}</p>
-                <p className="text-gray-400 text-sm">
-                  {item.is_system_post ? "SYSTEM" : item.user.name} @ {new Date(item.created_at).toLocaleString("pl-PL", {
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    second: "2-digit",
-                    hour12: false
-                  })}
-                </p>
+              <div 
+                key={item.id} 
+                className="border border-gray-800 p-6 neon-box rounded-lg transition-transform hover:scale-102 hover:shadow-lg"
+              >
+                <p className="mb-4 text-base md:text-lg">{item.content}</p>
+                <div className="flex justify-between items-center text-gray-400 text-sm">
+                  <span className="font-medium">
+                    {item.is_system_post ? "SYSTEM" : item.user.name}
+                  </span>
+                  <span>
+                    {new Date(item.created_at).toLocaleString("pl-PL", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                      hour12: false
+                    })}
+                  </span>
+                </div>
               </div>
             ))
           )}

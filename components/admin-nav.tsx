@@ -4,48 +4,37 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 
 export default function AdminNav() {
-  const pathname = usePathname()
+  const pathname = usePathname() || ""
 
   const navItems = [
-    { href: "/admin", label: "Dashboard" },
-    { href: "/admin/users", label: "Użytkownicy" },
-    { href: "/admin/polls", label: "Ankiety" },
-    { href: "/admin/news", label: "Aktualności" },
-    { href: "/admin/meetings", label: "Spotkania" },
-    { href: "/admin/materials", label: "Materiały" },
+    { path: "/admin/users", label: "Użytkownicy" },
+    { path: "/admin/polls", label: "Ankiety" },
+    { path: "/admin/news", label: "Aktualności" },
+    { path: "/admin/materials", label: "Materiały" },
+    { path: "/admin/meetings", label: "Spotkania" },
   ]
 
   return (
-    <div className="bg-gray-900 border-b border-gray-800">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between py-4">
-          <h1 className="text-2xl font-bold glitch">ADMIN PANEL</h1>
-          <nav>
-            <ul className="flex space-x-6">
-              {navItems.map((item) => (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    className={`hover:text-[#39FF14] transition-colors ${
-                      pathname === item.href ? "text-[#39FF14]" : ""
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                </li>
-              ))}
-              <li>
-                <Link
-                  href="/dashboard"
-                  className="hover:text-[#39FF14] transition-colors"
-                >
-                  Powrót do strony głównej
-                </Link>
-              </li>
-            </ul>
-          </nav>
+    <nav className="bg-black/50 border-b border-gray-800 mb-6">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex flex-col sm:flex-row items-center justify-center h-auto sm:h-14 py-4 sm:py-0">
+          <div className="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-8">
+            {navItems.map((item) => (
+              <Link
+                key={item.path}
+                href={item.path}
+                className={`text-sm sm:text-base font-medium transition-colors hover:text-[#39FF14] ${
+                  pathname === item.path
+                    ? "text-[#39FF14]"
+                    : "text-gray-300"
+                }`}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
-    </div>
+    </nav>
   )
 } 

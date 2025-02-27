@@ -5,6 +5,7 @@ import type React from "react"
 import { useEffect, useRef, useState } from "react"
 import { FastForward, Pause, Play, Rewind, Volume2, VolumeX, Maximize, Minimize, Shield, Cpu } from "lucide-react"
 import { cn } from "@/lib/utils"
+import AnimatedButton from "./animated-button"
 
 interface VideoPlayerProps {
   src: string
@@ -13,42 +14,50 @@ interface VideoPlayerProps {
 
 export default function VideoPlayer({ src, poster }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const progressBarRef = useRef<HTMLDivElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [progress, setProgress] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [volume, setVolume] = useState(1)
   const [isMuted, setIsMuted] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [isBuffering, setIsBuffering] = useState(false)
+  const [showControls, setShowControls] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
   // Video event handlers
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
 
+    const handleLoadedMetadata = () => {
+      setDuration(video.duration)
+      setIsLoading(false)
+    }
+
+    const handleError = () => {
+      setError("Nie udało się załadować wideo")
+      setIsLoading(false)
+    }
+
     const handleTimeUpdate = () => {
-      setProgress((video.currentTime / video.duration) * 100)
       setCurrentTime(video.currentTime)
     }
 
-    const handleLoadedMetadata = () => {
-      setDuration(video.duration)
+    const handleEnded = () => {
+      setIsPlaying(false)
     }
 
-    const handleWaiting = () => setIsBuffering(true)
-    const handlePlaying = () => setIsBuffering(false)
-
-    video.addEventListener("timeupdate", handleTimeUpdate)
     video.addEventListener("loadedmetadata", handleLoadedMetadata)
-    video.addEventListener("waiting", handleWaiting)
-    video.addEventListener("playing", handlePlaying)
+    video.addEventListener("error", handleError)
+    video.addEventListener("timeupdate", handleTimeUpdate)
+    video.addEventListener("ended", handleEnded)
 
     return () => {
-      video.removeEventListener("timeupdate", handleTimeUpdate)
       video.removeEventListener("loadedmetadata", handleLoadedMetadata)
-      video.removeEventListener("waiting", handleWaiting)
-      video.removeEventListener("playing", handlePlaying)
+      video.removeEventListener("error", handleError)
+      video.removeEventListener("timeupdate", handleTimeUpdate)
+      video.removeEventListener("ended", handleEnded)
     }
   }, [])
 
@@ -92,16 +101,21 @@ export default function VideoPlayer({ src, poster }: VideoPlayerProps) {
 
   const toggleMute = () => {
     if (videoRef.current) {
-      videoRef.current.muted = !isMuted
-      setIsMuted(!isMuted)
+      if (isMuted) {
+        videoRef.current.volume = volume
+        setIsMuted(false)
+      } else {
+        videoRef.current.volume = 0
+        setIsMuted(true)
+      }
     }
   }
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newVolume = Number.parseFloat(e.target.value)
+    const newVolume = parseFloat(e.target.value)
+    setVolume(newVolume)
     if (videoRef.current) {
       videoRef.current.volume = newVolume
-      setVolume(newVolume)
       setIsMuted(newVolume === 0)
     }
   }
@@ -112,24 +126,27 @@ export default function VideoPlayer({ src, poster }: VideoPlayerProps) {
     }
   }
 
-  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const bounds = e.currentTarget.getBoundingClientRect()
-    const x = e.clientX - bounds.left
-    const width = bounds.width
-    const percentage = (x / width) * 100
-    if (videoRef.current) {
-      videoRef.current.currentTime = (percentage / 100) * duration
-    }
+  const handleProgressBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!progressBarRef.current || !videoRef.current) return
+
+    const rect = progressBarRef.current.getBoundingClientRect()
+    const pos = (e.clientX - rect.left) / rect.width
+    videoRef.current.currentTime = pos * duration
   }
 
   const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      videoRef.current?.parentElement?.requestFullscreen()
-      setIsFullscreen(true)
+    if (!videoRef.current) return
+
+    if (!isFullscreen) {
+      if (videoRef.current.requestFullscreen) {
+        videoRef.current.requestFullscreen()
+      }
     } else {
-      document.exitFullscreen()
-      setIsFullscreen(false)
+      if (document.exitFullscreen) {
+        document.exitFullscreen()
+      }
     }
+    setIsFullscreen(!isFullscreen)
   }
 
   const formatTime = (time: number) => {
@@ -139,12 +156,21 @@ export default function VideoPlayer({ src, poster }: VideoPlayerProps) {
   }
 
   return (
-    <div className="group relative aspect-video w-full overflow-hidden rounded-lg bg-black">
+    <div 
+      className="relative group bg-black rounded-lg overflow-hidden"
+      onMouseEnter={() => setShowControls(true)}
+      onMouseLeave={() => setShowControls(false)}
+    >
       {/* Scanlines Effect */}
       <div className="absolute inset-0 pointer-events-none bg-scanlines opacity-5" />
 
       {/* Video Element */}
-      <video ref={videoRef} className="h-full w-full" poster={poster} onClick={togglePlay}>
+      <video
+        ref={videoRef}
+        className="h-full w-full object-contain bg-black"
+        poster={poster}
+        onClick={togglePlay}
+      >
         <source src={src} type="video/mp4" />
         Your browser does not support the video tag.
       </video>
@@ -165,93 +191,90 @@ export default function VideoPlayer({ src, poster }: VideoPlayerProps) {
         </div>
         <div className="flex items-center gap-2">
           <Cpu className="w-4 h-4" />
-          <span>{isBuffering ? "BUFFERING..." : "STREAM_ACTIVE"}</span>
+          <span>{isLoading ? "BUFFERING..." : "STREAM_ACTIVE"}</span>
+        </div>
+      </div>
+
+      {/* Video Controls */}
+      <div 
+        className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-2 sm:p-4 transition-opacity duration-300 ${
+          showControls ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        {/* Progress Bar */}
+        <div 
+          ref={progressBarRef}
+          className="relative h-1 sm:h-1.5 bg-gray-600 cursor-pointer mb-2 sm:mb-4 rounded-full overflow-hidden"
+          onClick={handleProgressBarClick}
+        >
+          <div 
+            className="absolute top-0 left-0 h-full bg-[#39FF14]"
+            style={{ width: `${(currentTime / duration) * 100}%` }}
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2 sm:space-x-4">
+            {/* Play/Pause Button */}
+            <button
+              onClick={togglePlay}
+              className="text-white hover:text-[#39FF14] transition-colors text-lg sm:text-xl"
+            >
+              {isPlaying ? "⏸" : "▶"}
+            </button>
+
+            {/* Volume Controls */}
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={toggleMute}
+                className="text-white hover:text-[#39FF14] transition-colors text-lg sm:text-xl"
+              >
+                {isMuted || volume === 0 ? "🔇" : volume < 0.5 ? "🔉" : "🔊"}
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={isMuted ? 0 : volume}
+                onChange={handleVolumeChange}
+                className="w-16 sm:w-20"
+              />
+            </div>
+
+            {/* Time Display */}
+            <div className="text-white text-xs sm:text-sm">
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </div>
+          </div>
+
+          {/* Fullscreen Button */}
+          <button
+            onClick={toggleFullscreen}
+            className="text-white hover:text-[#39FF14] transition-colors text-lg sm:text-xl"
+          >
+            {isFullscreen ? "⤓" : "⤢"}
+          </button>
         </div>
       </div>
 
       {/* Play/Pause Overlay */}
-      <div
-        className={cn(
-          "absolute inset-0 flex items-center justify-center transition-opacity duration-300",
-          "bg-black/20 opacity-0 group-hover:opacity-100",
-        )}
-      >
-        <button
+      {!isPlaying && !error && !isLoading && (
+        <div 
+          className="absolute inset-0 flex items-center justify-center bg-black/50 cursor-pointer"
           onClick={togglePlay}
-          className="rounded-full bg-[#0f0]/20 p-6 backdrop-blur-sm transition-transform hover:scale-110 border border-[#0f0]/50 hover:border-[#0f0]"
         >
-          {isPlaying ? <Pause className="h-8 w-8 text-[#0f0]" /> : <Play className="h-8 w-8 text-[#0f0]" />}
-        </button>
-      </div>
-
-      {/* Controls */}
-      <div
-        className={cn(
-          "absolute inset-x-0 bottom-0 flex flex-col gap-2 pb-2 pt-20",
-          "bg-gradient-to-t from-black/80 to-transparent opacity-0 transition-opacity duration-300",
-          "group-hover:opacity-100",
-        )}
-      >
-        {/* Progress Bar */}
-        <div className="relative mx-4 h-1 cursor-pointer" onClick={handleProgressClick}>
-          <div className="absolute h-full w-full rounded-full bg-[#0f0]/20" />
-          <div
-            className="absolute h-full rounded-full bg-[#0f0] transition-all duration-100"
-            style={{ width: `${progress}%` }}
-          >
-            <div className="absolute -right-2 -top-1.5 h-4 w-4 rounded-full border-2 border-[#0f0] bg-black" />
+          <div className="text-4xl sm:text-6xl text-white hover:text-[#39FF14] transition-colors">
+            ▶
           </div>
         </div>
+      )}
 
-        {/* Control Bar */}
-        <div className="flex items-center gap-4 px-4 font-mono">
-          {/* Play/Pause */}
-          <button onClick={togglePlay} className="rounded-lg p-1.5 transition-colors hover:bg-[#0f0]/10">
-            {isPlaying ? <Pause className="h-5 w-5 text-[#0f0]" /> : <Play className="h-5 w-5 text-[#0f0]" />}
-          </button>
-
-          {/* Rewind/Forward */}
-          <button onClick={() => skip(-10)} className="rounded-lg p-1.5 transition-colors hover:bg-[#0f0]/10">
-            <Rewind className="h-5 w-5 text-[#0f0]" />
-          </button>
-          <button onClick={() => skip(10)} className="rounded-lg p-1.5 transition-colors hover:bg-[#0f0]/10">
-            <FastForward className="h-5 w-5 text-[#0f0]" />
-          </button>
-
-          {/* Volume */}
-          <div className="flex items-center gap-2">
-            <button onClick={toggleMute} className="rounded-lg p-1.5 transition-colors hover:bg-[#0f0]/10">
-              {isMuted ? <VolumeX className="h-5 w-5 text-[#0f0]" /> : <Volume2 className="h-5 w-5 text-[#0f0]" />}
-            </button>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.1"
-              value={isMuted ? 0 : volume}
-              onChange={handleVolumeChange}
-              className="h-1 w-20 cursor-pointer appearance-none rounded-full bg-[#0f0]/20"
-              style={{
-                backgroundImage: `linear-gradient(to right, #0f0 ${
-                  (isMuted ? 0 : volume) * 100
-                }%, rgba(0,255,0,0.2) ${(isMuted ? 0 : volume) * 100}%)`,
-              }}
-            />
-          </div>
-
-          {/* Time */}
-          <div className="ml-auto text-sm text-[#0f0]">
-            <span className="opacity-90">{formatTime(currentTime)}</span>
-            <span className="mx-1 opacity-60">/</span>
-            <span className="opacity-60">{formatTime(duration)}</span>
-          </div>
-
-          {/* Fullscreen */}
-          <button onClick={toggleFullscreen} className="rounded-lg p-1.5 transition-colors hover:bg-[#0f0]/10">
-            {isFullscreen ? <Minimize className="h-5 w-5 text-[#0f0]" /> : <Maximize className="h-5 w-5 text-[#0f0]" />}
-          </button>
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+          <div className="text-red-500">{error}</div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
