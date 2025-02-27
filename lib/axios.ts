@@ -32,6 +32,16 @@ const api = axios.create({
 let isRefreshingSession = false
 let failedQueue: QueueItem[] = []
 
+// Special configuration for login endpoint
+const loginConfig = {
+  headers: {
+    "Content-Type": "application/json",
+    "X-Requested-With": "XMLHttpRequest",
+    "Accept": "application/json",
+  },
+  withCredentials: true,
+}
+
 // Check if user is logged in and redirect if necessary
 const checkAuthAndRedirect = async () => {
   if (typeof window === 'undefined') return
@@ -114,9 +124,19 @@ api.interceptors.request.use(
         config.headers["X-XSRF-TOKEN"] = decodeURIComponent(token)
       }
 
-      // Add common headers
-      config.headers["Origin"] = window.location.origin
-      config.headers["Referer"] = window.location.origin
+      // Add common headers for all requests
+      if (typeof window !== 'undefined') {
+        config.headers["Origin"] = window.location.origin
+        config.headers["Referer"] = window.location.origin
+      }
+
+      // Special handling for login endpoint
+      if (config.url === "/api/login") {
+        config.headers = {
+          ...config.headers,
+          ...loginConfig.headers,
+        }
+      }
 
       return config
     } catch (error) {

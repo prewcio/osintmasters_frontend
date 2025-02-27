@@ -38,11 +38,27 @@ export default function Login() {
         throw new Error('Failed to get CSRF token')
       }
 
-      // Then attempt login
-      const response = await api.post("/api/login", {
-        email,
-        password,
-      })
+      // Get the XSRF-TOKEN from cookies
+      const token = document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("XSRF-TOKEN="))
+        ?.split("=")[1]
+
+      // Then attempt login with proper headers
+      const response = await api.post("/api/login", 
+        {
+          email,
+          password,
+        },
+        {
+          withCredentials: true,
+          headers: {
+            'X-XSRF-TOKEN': token ? decodeURIComponent(token) : '',
+            'Origin': window.location.origin,
+            'Referer': window.location.origin,
+          }
+        }
+      )
 
       if (response.data.token) {
         // Store the token in localStorage
