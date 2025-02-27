@@ -10,6 +10,7 @@ import { CHAT_CHANNEL } from "@/lib/ably"
 import type { Types } from 'ably'
 import Ably from "ably/promises"
 import { NextResponse } from "next/server"
+import axios from "axios"
 
 type Message = {
   id: number
@@ -186,29 +187,39 @@ export default function LiveChat() {
   )
 }
 
-export async function POST(request: Request) {
-  if (!process.env.ABLY_API_KEY) {
-    return NextResponse.json(
-      { error: "Missing Ably API key" },
-      { status: 500 }
-    );
+const api = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000",
+  headers: {
+    "Content-Type": "application/json",
+    "Accept": "application/json"
   }
+});
 
+export async function GET(request: Request) {
   try {
-    const client = new Ably.Rest(process.env.ABLY_API_KEY);
-    const { clientId } = await request.json();
+    const response = await api.get("/api/chat/messages");
+    return NextResponse.json(response.data);
+  } catch (error) {
+    console.error("Failed to fetch messages:", error);
+    return NextResponse.json({ error: "Failed to fetch messages" }, { status: 500 });
+  }
+}
 
-    const tokenRequestData = await client.auth.createTokenRequest({
-      clientId: clientId || undefined,
+export async function POST(request: Request) {
+  try {
+    const data = await request.json();
+    const token = request.headers.get("Authorization")?.split(" ")[1];
+
+    const response = await api.post("/api/chat/messages", data, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
     });
 
-    return NextResponse.json(tokenRequestData);
+    return NextResponse.json(response.data);
   } catch (error) {
-    console.error('Error creating Ably token request:', error);
-    return NextResponse.json(
-      { error: "Failed to create Ably token request" },
-      { status: 500 }
-    );
+    console.error("Failed to send message:", error);
+    return NextResponse.json({ error: "Failed to send message" }, { status: 500 });
   }
 }
 
