@@ -203,21 +203,27 @@ export default function AdminMaterials() {
       while (currentChunk < totalChunks) {
         const start = currentChunk * chunkSize
         const end = Math.min(start + chunkSize, totalSize)
-        const chunk = file.slice(start, end)
         
-        // Create a file object from the chunk
-        const chunkFile = new File([chunk], file.name, { type: file.type })
-
+        // Create a new blob for each chunk
+        const chunkBlob = file.slice(start, end)
+        
+        // Create a new FormData for each chunk
         const formData = new FormData()
         formData.append('title', newMaterial.title)
         formData.append('type', newMaterial.type)
-        formData.append('file', chunkFile) // Use the File object, not the blob
         formData.append('chunk', currentChunk.toString())
         formData.append('chunks', totalChunks.toString())
         formData.append('total_size', totalSize.toString())
         formData.append('file_hash', fileHash)
         formData.append('file_type', file.name.split('.').pop() || '')
-
+        
+        // Important: append the file last and give it a proper filename
+        // This is critical - create a new File with a name from the blob
+        const chunkFile = new File([chunkBlob], file.name, { type: file.type })
+        formData.append('file', chunkFile)
+        
+        console.log('Sending chunk', currentChunk, 'of', totalChunks, 'size:', chunkBlob.size)
+        
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/materials`, {
           method: 'POST',
           body: formData,
@@ -226,11 +232,12 @@ export default function AdminMaterials() {
             'Authorization': `Bearer ${localStorage.getItem("token")}`,
             'X-XSRF-TOKEN': decodeURIComponent(csrfToken),
             'X-Requested-With': 'XMLHttpRequest'
+            // Don't set Content-Type header manually - let the browser set it with the boundary
           }
         })
 
         if (!response.ok) {
-          const errorData = await response.json()
+          const errorData = await response.json().catch(() => ({ message: 'Unknown error' }))
           throw new Error(errorData.message || `Upload failed at chunk ${currentChunk}`)
         }
         
