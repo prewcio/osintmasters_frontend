@@ -199,7 +199,7 @@ export default function AdminMaterials() {
     try {
       // Get CSRF token
       await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sanctum/csrf-cookie`, {
-        credentials: "include",
+        credentials: 'include'
       })
 
       const file = newMaterial.file
@@ -207,59 +207,15 @@ export default function AdminMaterials() {
       const chunkSize = getChunkSize(totalSize)
       const totalChunks = Math.ceil(totalSize / chunkSize)
       const fileHash = await calculateHash(file)
-
-      // For small files, use a single chunk upload
-      if (totalChunks === 1) {
-        console.log("Uploading small file in a single request")
-
-        const formData = new FormData()
-        formData.append("title", newMaterial.title)
-        formData.append("type", newMaterial.type)
-        formData.append("file_type", file.name.split(".").pop() || "")
-        formData.append("file", file)
-
-        const csrfToken = document.cookie
-          .split("; ")
-          .find((row) => row.startsWith("XSRF-TOKEN="))
-          ?.split("=")[1]
-
-        if (!csrfToken) {
-          throw new Error("Failed to get CSRF token")
-        }
-
-        const response = await api.post("/api/admin/materials", formData, {
-          headers: {
-            "X-XSRF-TOKEN": decodeURIComponent(csrfToken),
-            "X-Requested-With": "XMLHttpRequest",
-            "Content-Type": "multipart/form-data",
-          },
-          onUploadProgress: (progressEvent) => {
-            const progress = Math.round((progressEvent.loaded / progressEvent.total) * 100)
-            setUploadProgress((prev) => ({ ...prev, [newMaterial.title]: progress }))
-          },
-        })
-
-        if (response.status !== 201) {
-          throw new Error("Upload failed")
-        }
-
-        // Refresh materials list after successful upload
-        const materialsResponse = await api.get<Material[]>("/api/admin/materials")
-        setMaterials(materialsResponse.data || [])
-        setNewMaterial({ title: "", type: "file", file: null })
-        setUploadProgress({})
-        return
-      }
-
-      // For larger files, use chunked upload
+      
       let currentChunk = 0
       let uploadedSize = 0
 
       // Get CSRF token
       const csrfToken = document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("XSRF-TOKEN="))
-        ?.split("=")[1]
+        .split('; ')
+        .find(row => row.startsWith('XSRF-TOKEN='))
+        ?.split('=')[1]
 
       if (!csrfToken) {
         throw new Error("Failed to get CSRF token")
@@ -269,48 +225,52 @@ export default function AdminMaterials() {
       while (currentChunk < totalChunks) {
         const start = currentChunk * chunkSize
         const end = Math.min(start + chunkSize, totalSize)
-
+        
         // Create a new blob for each chunk
         const chunkBlob = file.slice(start, end)
-
+        
         // Create a new FormData for each chunk
         const formData = new FormData()
-        formData.append("title", newMaterial.title)
-        formData.append("type", newMaterial.type)
-        formData.append("chunk", currentChunk.toString())
-        formData.append("chunks", totalChunks.toString())
-        formData.append("total_size", totalSize.toString())
-        formData.append("file_hash", fileHash)
-        formData.append("file_type", file.name.split(".").pop() || "")
-
-        // Create a new File object with the original filename
-        const chunkFile = new File([chunkBlob], file.name, { type: file.type })
-        formData.append("file", chunkFile)
-
-        console.log("Sending chunk", currentChunk + 1, "of", totalChunks, "size:", chunkBlob.size, "bytes")
-
+        formData.append('title', newMaterial.title)
+        formData.append('type', newMaterial.type)
+        formData.append('chunk', currentChunk.toString())
+        formData.append('chunks', totalChunks.toString())
+        formData.append('total_size', totalSize.toString())
+        formData.append('file_hash', fileHash)
+        formData.append('file_type', file.name.split('.').pop() || '')
+        
+        // IMPORTANT FIX: Directly append the Blob as a file with the original filename
+        formData.append('file', new File([chunkBlob], file.name, { type: file.type }))
+        
+        console.log('Sending chunk', currentChunk, 'of', totalChunks, 'size:', chunkBlob.size, 'file name:', file.name)
+        
+        // Debug: Check formData content
+        // for (let pair of formData.entries()) {
+        //   console.log(pair[0], pair[1]);
+        // }
+        
         // Use axios instance with the proper headers
         const response = await api.post("/api/admin/materials", formData, {
           headers: {
-            "X-XSRF-TOKEN": decodeURIComponent(csrfToken),
-            "X-Requested-With": "XMLHttpRequest",
-            "Content-Type": "multipart/form-data",
+            'X-XSRF-TOKEN': decodeURIComponent(csrfToken),
+            'X-Requested-With': 'XMLHttpRequest',
+            // Let the browser set the Content-Type with correct boundary
           },
           onUploadProgress: (progressEvent) => {
             const chunkProgress = progressEvent.loaded / progressEvent.total
             const overallProgress = ((currentChunk + chunkProgress) / totalChunks) * 100
-            setUploadProgress((prev) => ({ ...prev, [newMaterial.title]: Math.round(overallProgress) }))
-          },
+            setUploadProgress(prev => ({ ...prev, [newMaterial.title]: Math.round(overallProgress) }))
+          }
         })
 
         if (response.status !== 200 && response.status !== 201) {
-          throw new Error(`Upload failed at chunk ${currentChunk + 1}`)
+          throw new Error(`Upload failed at chunk ${currentChunk}`)
         }
-
+        
         currentChunk++
         uploadedSize = Math.min(uploadedSize + chunkSize, totalSize)
         const progress = Math.round((uploadedSize / totalSize) * 100)
-        setUploadProgress((prev) => ({ ...prev, [newMaterial.title]: progress }))
+        setUploadProgress(prev => ({ ...prev, [newMaterial.title]: progress }))
       }
 
       // Refresh materials list after successful upload
@@ -318,6 +278,7 @@ export default function AdminMaterials() {
       setMaterials(materialsResponse.data || [])
       setNewMaterial({ title: "", type: "file", file: null })
       setUploadProgress({})
+
     } catch (err: any) {
       console.error("Upload failed:", err)
       alert(err.message || "Nie udało się dodać materiału. Spróbuj ponownie później.")
