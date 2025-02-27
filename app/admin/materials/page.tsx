@@ -313,70 +313,16 @@ export default function AdminMaterials() {
         [newMaterial.title]: 0
       }))
 
-      // For small files (< 5MB), upload in one chunk
-      if (newMaterial.file.size <= 5 * 1024 * 1024) {
-        const formData = new FormData()
-        formData.append("title", newMaterial.title)
-        formData.append("type", newMaterial.type)
-        formData.append("file", newMaterial.file)
-        formData.append("original_name", newMaterial.file.name)
-        formData.append("total_size", newMaterial.file.size.toString())
-        formData.append("mime_type", newMaterial.file.type)
-        formData.append("checksum", await calculateMD5(newMaterial.file))
-
-        console.log('Uploading single file:', {
-          title: newMaterial.title,
-          type: newMaterial.type,
-          fileName: newMaterial.file.name,
-          size: newMaterial.file.size,
-          mimeType: newMaterial.file.type
-        })
-
-        // Get the current CSRF token
-        const csrfToken = document.cookie
-          .split('; ')
-          .find(row => row.startsWith('XSRF-TOKEN='))
-          ?.split('=')[1]
-
-        if (!csrfToken) {
-          throw new Error("No CSRF token found")
-        }
-
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/materials`, {
-          method: 'POST',
-          body: formData,
-          credentials: 'include',
-          headers: {
-            'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-XSRF-TOKEN': decodeURIComponent(csrfToken),
-            'Authorization': `Bearer ${token}`
-          }
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
-        }
-
-        const data = await response.json()
-        console.log('Upload response:', data)
-
-        if (data.uploaded) {
-          console.log('Upload completed successfully')
-          const materialsResponse = await api.get<Material[]>("/api/admin/materials")
-          setMaterials(materialsResponse.data || [])
-          setNewMaterial({ title: "", type: "file", file: null })
-          const fileInput = document.getElementById("file") as HTMLInputElement
-          if (fileInput) fileInput.value = ""
-          setUploadProgress({})
-          return
-        }
-      }
-
-      // For larger files, use chunked upload
+      // Always use chunked upload
       const chunkSize = getChunkSize(newMaterial.file.size)
       const chunks = Math.ceil(newMaterial.file.size / chunkSize)
+
+      console.log('Starting upload:', {
+        fileName: newMaterial.file.name,
+        fileSize: newMaterial.file.size,
+        chunks,
+        chunkSize
+      })
 
       for (let chunk = 0; chunk < chunks; chunk++) {
         const isComplete = await uploadChunk(
