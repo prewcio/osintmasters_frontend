@@ -112,6 +112,13 @@ api.interceptors.request.use(
       // Add origin header
       config.headers["Origin"] = window.location.origin
 
+      // Special handling for login endpoint
+      if (config.url === "/api/login") {
+        config.headers["Access-Control-Allow-Origin"] = "*"
+        config.headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS"
+        config.headers["Access-Control-Allow-Headers"] = "Content-Type, X-XSRF-TOKEN, X-Requested-With"
+      }
+
       return config
     } catch (error) {
       console.error("Request interceptor error:", error)

@@ -57,10 +57,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       api.defaults.headers.common["Authorization"] = `Bearer ${token}`
       
       // Try to get the CSRF token
-      await api.get("/sanctum/csrf-cookie")
+      await api.get("/sanctum/csrf-cookie", {
+        withCredentials: true,
+        headers: {
+          "Accept": "application/json",
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      })
 
       // Get user data
-      const response = await api.get("/api/user")
+      const response = await api.get("/api/user", {
+        withCredentials: true,
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Accept": "application/json",
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      })
+
       setUser(response.data)
     } catch (error) {
       console.error("Auth check failed:", error)
@@ -81,10 +95,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     try {
       // Get CSRF cookie first
-      await api.get("/sanctum/csrf-cookie")
+      await api.get("/sanctum/csrf-cookie", {
+        withCredentials: true,
+        headers: {
+          "Accept": "application/json",
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      })
       
       // Attempt login
-      const response = await api.post("/api/login", { email, password })
+      const response = await api.post("/api/login", 
+        { email, password },
+        {
+          withCredentials: true,
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "X-Requested-With": "XMLHttpRequest"
+          }
+        }
+      )
+
       const token = response.data.token
       
       // Store token
@@ -94,13 +125,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Get user data
       await checkAuth()
     } catch (error) {
+      console.error("Login failed:", error)
       throw new Error("Login failed")
     }
   }
 
   const logout = async () => {
     try {
-      await api.post("/api/logout")
+      const token = localStorage.getItem("token")
+      await api.post("/api/logout", null, {
+        withCredentials: true,
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Accept": "application/json",
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      })
     } catch (error) {
       console.error("Logout failed:", error)
     } finally {
@@ -114,13 +154,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const updateUser = async (data: FormData) => {
     try {
-      const response = await api.post("/api/user/update", data, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      })
+      const token = localStorage.getItem("token")
+      const response = await api.post("/api/user/update", 
+        data,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            "Authorization": `Bearer ${token}`,
+            "Accept": "application/json",
+            "X-Requested-With": "XMLHttpRequest"
+          },
+          withCredentials: true
+        }
+      )
       setUser(response.data)
     } catch (error) {
+      console.error("Failed to update user:", error)
       throw new Error("Failed to update user")
     }
   }

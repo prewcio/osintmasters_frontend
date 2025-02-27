@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import PageTransition from "@/components/page-transition"
@@ -23,19 +22,40 @@ export default function Login() {
     setLoading(true)
 
     try {
+      // First, get the CSRF token
+      await api.get("/sanctum/csrf-cookie", {
+        withCredentials: true,
+        headers: {
+          "Accept": "application/json",
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      })
+
+      // Then attempt login
       const response = await api.post("/api/login", {
         email,
         password,
+      }, {
+        withCredentials: true,
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "X-Requested-With": "XMLHttpRequest"
+        }
       })
 
-      // Store the token in localStorage or cookies
-      localStorage.setItem("token", response.data.token)
+      if (response.data.token) {
+        // Store the token in localStorage
+        localStorage.setItem("token", response.data.token)
+        
+        // Update auth context
+        await login(email, password)
 
-      // Update auth context
-      await login(email, password)
-
-      // Redirect to dashboard
-      router.push("/dashboard")
+        // Redirect to dashboard
+        router.push("/dashboard")
+      } else {
+        throw new Error("No token received")
+      }
     } catch (err: any) {
       console.error("Login error:", err)
       setError(err.response?.data?.message || "Nieprawidłowy email lub hasło")
@@ -47,49 +67,50 @@ export default function Login() {
   return (
     <PageTransition>
       <div className="min-h-screen flex items-center justify-center bg-black">
-        <div className="max-w-md w-full neon-box p-8">
-          <h1 className="text-3xl font-bold mb-6 text-center glitch">Logowanie</h1>
-          {error && (
-            <div className="bg-red-500/10 border border-red-500 text-red-500 px-4 py-2 rounded mb-4">{error}</div>
-          )}
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="email" className="block mb-2 text-sm">
-                Email
-              </label>
-              <input
-                type="email"
-                id="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-black border border-gray-800 p-3 rounded-md focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] transition-colors outline-none"
-                required
-                disabled={loading}
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="block mb-2 text-sm">
-                Hasło
-              </label>
-              <input
-                type="password"
-                id="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-black border border-gray-800 p-3 rounded-md focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] transition-colors outline-none"
-                required
-                disabled={loading}
-              />
-            </div>
-            <div className="flex flex-col gap-4">
-              <AnimatedButton type="submit" disabled={loading} className="w-full">
-                {loading ? "Logowanie..." : "Zaloguj się"}
-              </AnimatedButton>
-              <AnimatedButton href="/" className="w-full">
-                Powrót
-              </AnimatedButton>
-            </div>
-          </form>
+        <div className="max-w-md w-full mx-4">
+          <h1 className="text-4xl font-bold text-center mb-8 glitch">OSINT MASTERS</h1>
+          <div className="border border-gray-800 p-8 rounded-lg neon-box">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium mb-2">
+                  Email
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border border-gray-800 rounded-md bg-black text-white focus:outline-none focus:ring-2 focus:ring-[#39FF14] focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium mb-2">
+                  Hasło
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border border-gray-800 rounded-md bg-black text-white focus:outline-none focus:ring-2 focus:ring-[#39FF14] focus:border-transparent"
+                />
+              </div>
+              {error && (
+                <div className="text-red-500 text-sm text-center">{error}</div>
+              )}
+              <div>
+                <AnimatedButton
+                  type="submit"
+                  disabled={loading}
+                  className="w-full"
+                >
+                  {loading ? "Logowanie..." : "Zaloguj się"}
+                </AnimatedButton>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
     </PageTransition>
