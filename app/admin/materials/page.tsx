@@ -35,11 +35,22 @@ const calculateMD5 = async (file: File | Blob) => {
   }
 }
 
-// Add chunk size calculation utility
+// Update the chunk size calculation utility
 const getChunkSize = (fileSize: number) => {
-  if (fileSize <= 100 * 1024 * 1024) return 1 * 1024 * 1024 // 1MB for files up to 100MB
-  if (fileSize <= 1024 * 1024 * 1024) return 5 * 1024 * 1024 // 5MB for files up to 1GB
-  return 10 * 1024 * 1024 // 10MB for files larger than 1GB
+  // Base chunk sizes
+  const sizes = {
+    small: 1 * 1024 * 1024,    // 1MB
+    medium: 5 * 1024 * 1024,   // 5MB
+    large: 10 * 1024 * 1024    // 10MB
+  }
+
+  // Get the appropriate chunk size based on file size
+  let chunkSize = sizes.small
+  if (fileSize > 100 * 1024 * 1024) chunkSize = sizes.medium
+  if (fileSize > 1024 * 1024 * 1024) chunkSize = sizes.large
+
+  // Ensure chunk size doesn't exceed file size
+  return Math.min(chunkSize, fileSize)
 }
 
 export default function AdminMaterials() {
@@ -155,6 +166,7 @@ export default function AdminMaterials() {
     }
   }
 
+  // Update the handleSubmit function to properly handle chunking
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newMaterial.file || !newMaterial.title) {
@@ -171,14 +183,6 @@ export default function AdminMaterials() {
         credentials: 'include'
       })
 
-      // Get the current CSRF token from cookies
-      const getCsrfToken = () => {
-        return document.cookie
-          .split('; ')
-          .find(row => row.startsWith('XSRF-TOKEN='))
-          ?.split('=')[1]
-      }
-
       const file = newMaterial.file
       const totalSize = file.size
       const chunkSize = getChunkSize(totalSize)
@@ -188,6 +192,16 @@ export default function AdminMaterials() {
       let currentChunk = 0
       let uploadedSize = 0
 
+      // Get CSRF token
+      const csrfToken = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('XSRF-TOKEN='))
+        ?.split('=')[1]
+
+      if (!csrfToken) {
+        throw new Error("Failed to get CSRF token")
+      }
+
       while (currentChunk < totalChunks) {
         const start = currentChunk * chunkSize
         const end = Math.min(start + chunkSize, totalSize)
@@ -196,17 +210,13 @@ export default function AdminMaterials() {
         const formData = new FormData()
         formData.append('title', newMaterial.title)
         formData.append('type', newMaterial.type)
-        formData.append('file', chunk)
+        formData.append('file', chunk, file.name) // Include original filename
         formData.append('chunk', currentChunk.toString())
         formData.append('chunks', totalChunks.toString())
         formData.append('chunk_size', chunkSize.toString())
         formData.append('total_size', totalSize.toString())
         formData.append('file_hash', fileHash)
-
-        const csrfToken = getCsrfToken()
-        if (!csrfToken) {
-          throw new Error("Failed to get CSRF token")
-        }
+        formData.append('file_type', file.name.split('.').pop() || '')
 
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/materials`, {
           method: 'POST',
@@ -219,15 +229,18 @@ export default function AdminMaterials() {
           }
         })
 
-        if (!response.ok) throw new Error(`Upload failed at chunk ${currentChunk}`)
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.message || `Upload failed at chunk ${currentChunk}`)
+        }
         
         currentChunk++
-        uploadedSize += chunk.size
+        uploadedSize = Math.min(uploadedSize + chunkSize, totalSize)
         const progress = Math.round((uploadedSize / totalSize) * 100)
         setUploadProgress(prev => ({ ...prev, [newMaterial.title]: progress }))
       }
 
-      // Finalize upload and refresh list
+      // Refresh materials list after successful upload
       const materialsResponse = await api.get<Material[]>("/api/admin/materials")
       setMaterials(materialsResponse.data || [])
       setNewMaterial({ title: "", type: "file", file: null })
