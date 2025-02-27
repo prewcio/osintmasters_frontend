@@ -32,10 +32,8 @@ type AblyMessage = Types.Message & {
 const configureAblyClient = async () => {
   const clientId = Math.random().toString(36).substring(2, 15);
   
-  const response = await api.post('/api/ably/auth', { clientId });
-  
   return {
-    authUrl: response.data.token,
+    authUrl: `/api/ably?clientId=${clientId}`,
     clientId,
   };
 };
