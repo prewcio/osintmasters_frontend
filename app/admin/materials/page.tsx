@@ -20,8 +20,8 @@ type Material = {
   }
 }
 
-// Add MD5 checksum calculation utility
-const calculateMD5 = async (file: File | Blob) => {
+// Add SHA-256 checksum calculation utility
+const calculateHash = async (file: File | Blob) => {
   try {
     // First try using SHA-256 as it's widely supported
     const buffer = await file.arrayBuffer()
@@ -37,6 +37,12 @@ const calculateMD5 = async (file: File | Blob) => {
 
 // Update the chunk size calculation utility
 const getChunkSize = (fileSize: number) => {
+  // For smaller files, use a single chunk
+  if (fileSize < 5 * 1024 * 1024) {
+    // Less than 5MB
+    return fileSize
+  }
+
   // Base chunk sizes
   const sizes = {
     small: 1 * 1024 * 1024, // 1MB
@@ -200,8 +206,52 @@ export default function AdminMaterials() {
       const totalSize = file.size
       const chunkSize = getChunkSize(totalSize)
       const totalChunks = Math.ceil(totalSize / chunkSize)
-      const fileHash = await calculateMD5(file)
+      const fileHash = await calculateHash(file)
 
+      // For small files, use a single chunk upload
+      if (totalChunks === 1) {
+        console.log("Uploading small file in a single request")
+
+        const formData = new FormData()
+        formData.append("title", newMaterial.title)
+        formData.append("type", newMaterial.type)
+        formData.append("file_type", file.name.split(".").pop() || "")
+        formData.append("file", file)
+
+        const csrfToken = document.cookie
+          .split("; ")
+          .find((row) => row.startsWith("XSRF-TOKEN="))
+          ?.split("=")[1]
+
+        if (!csrfToken) {
+          throw new Error("Failed to get CSRF token")
+        }
+
+        const response = await api.post("/api/admin/materials", formData, {
+          headers: {
+            "X-XSRF-TOKEN": decodeURIComponent(csrfToken),
+            "X-Requested-With": "XMLHttpRequest",
+            "Content-Type": "multipart/form-data",
+          },
+          onUploadProgress: (progressEvent) => {
+            const progress = Math.round((progressEvent.loaded / progressEvent.total) * 100)
+            setUploadProgress((prev) => ({ ...prev, [newMaterial.title]: progress }))
+          },
+        })
+
+        if (response.status !== 201) {
+          throw new Error("Upload failed")
+        }
+
+        // Refresh materials list after successful upload
+        const materialsResponse = await api.get<Material[]>("/api/admin/materials")
+        setMaterials(materialsResponse.data || [])
+        setNewMaterial({ title: "", type: "file", file: null })
+        setUploadProgress({})
+        return
+      }
+
+      // For larger files, use chunked upload
       let currentChunk = 0
       let uploadedSize = 0
 
@@ -233,26 +283,11 @@ export default function AdminMaterials() {
         formData.append("file_hash", fileHash)
         formData.append("file_type", file.name.split(".").pop() || "")
 
-        // Important: append the file with the proper name
-        // Append the chunk blob directly with the original filename
-        // This is more reliable than creating a new File object
-        formData.append("file", chunkBlob, file.name)
+        // Create a new File object with the original filename
+        const chunkFile = new File([chunkBlob], file.name, { type: file.type })
+        formData.append("file", chunkFile)
 
-        console.log("Sending chunk", currentChunk, "of", totalChunks, "size:", chunkBlob.size, "file name:", file.name)
-
-        // Log the FormData contents for debugging
-        console.log("FormData entries:")
-        for (const pair of formData.entries()) {
-          if (pair[0] === "file") {
-            console.log(pair[0], "File object:", {
-              name: pair[1].name || "No name",
-              type: pair[1].type || "No type",
-              size: pair[1].size || "No size",
-            })
-          } else {
-            console.log(pair[0], pair[1])
-          }
-        }
+        console.log("Sending chunk", currentChunk + 1, "of", totalChunks, "size:", chunkBlob.size, "bytes")
 
         // Use axios instance with the proper headers
         const response = await api.post("/api/admin/materials", formData, {
@@ -269,7 +304,7 @@ export default function AdminMaterials() {
         })
 
         if (response.status !== 200 && response.status !== 201) {
-          throw new Error(`Upload failed at chunk ${currentChunk}`)
+          throw new Error(`Upload failed at chunk ${currentChunk + 1}`)
         }
 
         currentChunk++
