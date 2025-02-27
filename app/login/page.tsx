@@ -44,25 +44,38 @@ export default function Login() {
         .find((row) => row.startsWith("XSRF-TOKEN="))
         ?.split("=")[1]
 
-      // Then attempt login with proper headers
-      const response = await api.post("/api/login", 
-        {
+      if (!token) {
+        throw new Error('No CSRF token found')
+      }
+
+      // Then attempt login using fetch
+      const loginResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/login`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          'X-XSRF-TOKEN': decodeURIComponent(token),
+          'Origin': window.location.origin,
+          'Referer': window.location.origin,
+        },
+        body: JSON.stringify({
           email,
           password,
-        },
-        {
-          withCredentials: true,
-          headers: {
-            'X-XSRF-TOKEN': token ? decodeURIComponent(token) : '',
-            'Origin': window.location.origin,
-            'Referer': window.location.origin,
-          }
-        }
-      )
+        }),
+      })
 
-      if (response.data.token) {
+      if (!loginResponse.ok) {
+        const errorData = await loginResponse.json().catch(() => ({}))
+        throw new Error(errorData.message || 'Login failed')
+      }
+
+      const data = await loginResponse.json()
+
+      if (data.token) {
         // Store the token in localStorage
-        localStorage.setItem("token", response.data.token)
+        localStorage.setItem("token", data.token)
         
         // Update auth context
         await login(email, password)
@@ -74,7 +87,7 @@ export default function Login() {
       }
     } catch (err: any) {
       console.error("Login error:", err)
-      setError(err.response?.data?.message || "Nieprawidłowy email lub hasło")
+      setError(err.message || "Nieprawidłowy email lub hasło")
     } finally {
       setLoading(false)
     }
