@@ -60,6 +60,43 @@ export default function AdminMaterials() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      // Validate file type
+      const validTypes = {
+        video: ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'],
+        file: [
+          'application/pdf',
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/vnd.ms-excel',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'text/plain',
+          'application/zip',
+          'application/x-rar-compressed',
+          'image/jpeg',
+          'image/png',
+          'image/gif',
+          'image/webp'
+        ]
+      }
+
+      const isValidType = newMaterial.type === 'video' 
+        ? validTypes.video.includes(file.type)
+        : validTypes.file.includes(file.type)
+
+      if (!isValidType) {
+        alert("Nieprawidłowy format pliku")
+        e.target.value = ''
+        return
+      }
+
+      // Validate file size
+      const maxSize = 500 * 1024 * 1024 // 500MB
+      if (file.size > maxSize) {
+        alert("Plik jest za duży (maksymalny rozmiar: 500MB)")
+        e.target.value = ''
+        return
+      }
+
       console.log('Selected file:', {
         name: file.name,
         size: file.size,
@@ -85,7 +122,8 @@ export default function AdminMaterials() {
     const formData = new FormData()
     formData.append("title", title)
     formData.append("type", type)
-    formData.append("file", chunkBlob, file.name) // Add original filename
+    formData.append("file", chunkBlob)
+    formData.append("original_name", file.name)
     formData.append("chunk", chunk.toString())
     formData.append("chunks", chunks.toString())
     formData.append("chunk_size", chunkSize.toString())
@@ -97,6 +135,7 @@ export default function AdminMaterials() {
       const response = await api.post<{ uploaded: boolean; progress: number }>("/api/admin/materials", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
+          "Accept": "application/json",
         },
         onUploadProgress: (progressEvent) => {
           const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total!)
@@ -117,6 +156,10 @@ export default function AdminMaterials() {
         data: err.response?.data,
         headers: err.response?.headers
       })
+      
+      if (err.response?.status === 422) {
+        throw new Error(err.response?.data?.message || "Błąd walidacji pliku")
+      }
       
       // If we get a "Content Too Large" error or it's a server error (5xx)
       if (err.response?.status === 413 || (err.response?.status >= 500 && err.response?.status < 600)) {
@@ -140,8 +183,8 @@ export default function AdminMaterials() {
       return
     }
 
-    // Start with smaller chunks for better reliability
-    const chunkSize = 2 * 1024 * 1024 // Start with 2MB chunks
+    // Use smaller chunks for better reliability
+    const chunkSize = 1 * 1024 * 1024 // Start with 1MB chunks
     const chunks = Math.ceil(newMaterial.file.size / chunkSize)
 
     try {
@@ -149,7 +192,8 @@ export default function AdminMaterials() {
         fileName: newMaterial.file.name,
         fileSize: newMaterial.file.size,
         chunks,
-        chunkSize
+        chunkSize,
+        mimeType: newMaterial.file.type
       })
 
       setUploadProgress(prev => ({
@@ -157,6 +201,43 @@ export default function AdminMaterials() {
         [newMaterial.title]: 0
       }))
 
+      // For small files (< 2MB), upload in one chunk
+      if (newMaterial.file.size <= 2 * 1024 * 1024) {
+        const formData = new FormData()
+        formData.append("title", newMaterial.title)
+        formData.append("type", newMaterial.type)
+        formData.append("file", newMaterial.file)
+        formData.append("original_name", newMaterial.file.name)
+        formData.append("total_size", newMaterial.file.size.toString())
+        formData.append("mime_type", newMaterial.file.type)
+
+        const response = await api.post("/api/admin/materials", formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            "Accept": "application/json",
+          },
+          onUploadProgress: (progressEvent) => {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total!)
+            setUploadProgress(prev => ({
+              ...prev,
+              [newMaterial.title]: percentCompleted
+            }))
+          }
+        })
+
+        if (response.data) {
+          console.log('Upload completed successfully')
+          const materialsResponse = await api.get<Material[]>("/api/admin/materials")
+          setMaterials(materialsResponse.data || [])
+          setNewMaterial({ title: "", type: "file", file: null })
+          const fileInput = document.getElementById("file") as HTMLInputElement
+          if (fileInput) fileInput.value = ""
+          setUploadProgress({})
+          return
+        }
+      }
+
+      // For larger files, use chunked upload
       for (let chunk = 0; chunk < chunks; chunk++) {
         const isComplete = await uploadChunk(
           newMaterial.file,
@@ -169,31 +250,16 @@ export default function AdminMaterials() {
 
         if (isComplete) {
           console.log('Upload completed successfully')
-          // Refresh materials list
           const response = await api.get<Material[]>("/api/admin/materials")
           setMaterials(response.data || [])
-          // Reset form
-          setNewMaterial({
-            title: "",
-            type: "file",
-            file: null
-          })
-          // Reset file input
+          setNewMaterial({ title: "", type: "file", file: null })
           const fileInput = document.getElementById("file") as HTMLInputElement
           if (fileInput) fileInput.value = ""
-          // Clear progress
-          setUploadProgress(prev => {
-            const newProgress = { ...prev }
-            delete newProgress[newMaterial.title]
-            return newProgress
-          })
+          setUploadProgress({})
           break
         }
 
-        // Add a delay between chunks to prevent rate limiting
-        if (chunk < chunks - 1) {
-          await delay(1000) // 1 second delay between chunks
-        }
+        await delay(500) // 0.5 second delay between chunks
       }
     } catch (err: any) {
       console.error("Upload failed:", {
@@ -202,6 +268,7 @@ export default function AdminMaterials() {
         status: err.response?.status
       })
       alert(err.response?.data?.message || "Nie udało się dodać materiału. Spróbuj ponownie później.")
+      setUploadProgress({})
     }
   }
 
