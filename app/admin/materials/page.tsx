@@ -155,6 +155,39 @@ export default function AdminMaterials() {
     }
   }
 
+  const getCsrfToken = async () => {
+    try {
+      // Get CSRF token
+      const csrfResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sanctum/csrf-cookie`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+        }
+      });
+
+      if (!csrfResponse.ok) {
+        throw new Error('Failed to get CSRF token');
+      }
+
+      // Get the XSRF-TOKEN from cookies
+      const token = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('XSRF-TOKEN='))
+        ?.split('=')[1];
+
+      if (!token) {
+        throw new Error('No CSRF token found in cookies');
+      }
+
+      return decodeURIComponent(token);
+    } catch (error) {
+      console.error('Error getting CSRF token:', error);
+      throw error;
+    }
+  };
+
   const uploadChunk = async (
     file: File,
     chunk: number,
@@ -193,6 +226,9 @@ export default function AdminMaterials() {
       try {
         console.log(`Uploading chunk ${chunk + 1}/${chunks}, size: ${chunkBlob.size} bytes, attempt: ${currentRetry + 1}`)
         
+        // Get fresh CSRF token before each attempt
+        const token = await getCsrfToken();
+        
         // Use fetch instead of axios for better upload handling
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/materials`, {
           method: 'POST',
@@ -201,6 +237,7 @@ export default function AdminMaterials() {
           headers: {
             'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
+            'X-XSRF-TOKEN': token
           }
         })
 
@@ -278,6 +315,9 @@ export default function AdminMaterials() {
           mimeType: newMaterial.file.type
         })
 
+        // Get fresh CSRF token before upload
+        const token = await getCsrfToken();
+
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/materials`, {
           method: 'POST',
           body: formData,
@@ -285,6 +325,7 @@ export default function AdminMaterials() {
           headers: {
             'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
+            'X-XSRF-TOKEN': token
           }
         })
 
