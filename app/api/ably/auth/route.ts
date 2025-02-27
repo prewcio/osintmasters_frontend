@@ -1,7 +1,7 @@
 import Ably from "ably/promises"
 import { NextResponse } from "next/server"
 
-export async function GET(request: Request) {
+export async function POST(request: Request) {
   if (!process.env.ABLY_API_KEY) {
     return NextResponse.json(
       { error: "Missing Ably API key" }, 
@@ -11,8 +11,7 @@ export async function GET(request: Request) {
 
   try {
     const client = new Ably.Rest(process.env.ABLY_API_KEY)
-    const tokenParams = new URL(request.url).searchParams
-    const clientId = tokenParams.get('clientId')
+    const { clientId } = await request.json()
 
     const tokenRequestData = await client.auth.createTokenRequest({
       clientId: clientId || undefined
