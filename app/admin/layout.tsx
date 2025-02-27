@@ -1,12 +1,11 @@
 "use client"
 
-import type React from "react"
-import { useState, useEffect } from "react"
-import { useAuth } from "@/hooks/useAuth"
 import { redirect } from "next/navigation"
+import { useAuth } from "@/hooks/useAuth"
+import { useState, useEffect } from "react"
+import api from "@/lib/axios"
 import Navbar from "@/components/navbar"
 import AdminNav from "@/components/admin-nav"
-import api from "@/lib/axios"
 
 interface Poll {
   id: number
@@ -43,7 +42,11 @@ export default function AdminLayout({
   }, [])
 
   if (loading) {
-    return <div>Loading...</div>
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <div className="text-xl glitch">Loading...</div>
+      </div>
+    )
   }
 
   if (!user || user.id !== 1) {
@@ -54,7 +57,7 @@ export default function AdminLayout({
     <div className="min-h-screen bg-black text-white">
       <Navbar activeVotes={activeVotes} />
       <AdminNav />
-      <main className="container mx-auto px-4 py-8 animate-fadeIn">{children}</main>
+      <main className="container mx-auto px-4 py-6 md:py-8 animate-fadeIn">{children}</main>
     </div>
   )
 }
