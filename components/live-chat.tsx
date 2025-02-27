@@ -8,6 +8,8 @@ import AnimatedButton from "./animated-button"
 import api from "@/lib/axios"
 import { CHAT_CHANNEL } from "@/lib/ably"
 import type { Types } from 'ably'
+import Ably from "ably/promises"
+import { NextResponse } from "next/server"
 
 type Message = {
   id: number
@@ -182,5 +184,31 @@ export default function LiveChat() {
       </form>
     </div>
   )
+}
+
+export async function POST(request: Request) {
+  if (!process.env.ABLY_API_KEY) {
+    return NextResponse.json(
+      { error: "Missing Ably API key" },
+      { status: 500 }
+    );
+  }
+
+  try {
+    const client = new Ably.Rest(process.env.ABLY_API_KEY);
+    const { clientId } = await request.json();
+
+    const tokenRequestData = await client.auth.createTokenRequest({
+      clientId: clientId || undefined,
+    });
+
+    return NextResponse.json(tokenRequestData);
+  } catch (error) {
+    console.error('Error creating Ably token request:', error);
+    return NextResponse.json(
+      { error: "Failed to create Ably token request" },
+      { status: 500 }
+    );
+  }
 }
 
