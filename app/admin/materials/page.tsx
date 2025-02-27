@@ -171,6 +171,14 @@ export default function AdminMaterials() {
         credentials: 'include'
       })
 
+      // Get the current CSRF token from cookies
+      const getCsrfToken = () => {
+        return document.cookie
+          .split('; ')
+          .find(row => row.startsWith('XSRF-TOKEN='))
+          ?.split('=')[1]
+      }
+
       const file = newMaterial.file
       const totalSize = file.size
       const chunkSize = getChunkSize(totalSize)
@@ -195,12 +203,18 @@ export default function AdminMaterials() {
         formData.append('total_size', totalSize.toString())
         formData.append('file_hash', fileHash)
 
+        const csrfToken = getCsrfToken()
+        if (!csrfToken) {
+          throw new Error("Failed to get CSRF token")
+        }
+
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/materials`, {
           method: 'POST',
           body: formData,
           credentials: 'include',
           headers: {
             'Authorization': `Bearer ${token}`,
+            'X-XSRF-TOKEN': decodeURIComponent(csrfToken),
             'X-Requested-With': 'XMLHttpRequest'
           }
         })
