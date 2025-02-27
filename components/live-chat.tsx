@@ -42,6 +42,11 @@ const configureAblyClient = async () => {
       clientId,
     },
     clientId,
+    useBinaryProtocol: false,
+    echoMessages: false,
+    recover: function(_lastConnectionDetails: unknown, cb: (shouldRecover: boolean) => void) {
+      cb(false); // Don't recover
+    },
   };
 };
 
