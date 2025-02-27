@@ -24,14 +24,14 @@ type Material = {
 const calculateMD5 = async (file: File | Blob) => {
   try {
     // First try using SHA-256 as it's widely supported
-    const buffer = await file.arrayBuffer();
-    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    const buffer = await file.arrayBuffer()
+    const hashBuffer = await crypto.subtle.digest("SHA-256", buffer)
+    const hashArray = Array.from(new Uint8Array(hashBuffer))
+    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
   } catch (error) {
-    console.error('Hash calculation failed:', error);
+    console.error("Hash calculation failed:", error)
     // Return a timestamp-based hash as fallback
-    return Date.now().toString(16) + Math.random().toString(16).slice(2);
+    return Date.now().toString(16) + Math.random().toString(16).slice(2)
   }
 }
 
@@ -39,9 +39,9 @@ const calculateMD5 = async (file: File | Blob) => {
 const getChunkSize = (fileSize: number) => {
   // Base chunk sizes
   const sizes = {
-    small: 1 * 1024 * 1024,    // 1MB
-    medium: 5 * 1024 * 1024,   // 5MB
-    large: 10 * 1024 * 1024    // 10MB
+    small: 1 * 1024 * 1024, // 1MB
+    medium: 5 * 1024 * 1024, // 5MB
+    large: 10 * 1024 * 1024, // 10MB
   }
 
   // Get the appropriate chunk size based on file size
@@ -63,7 +63,7 @@ export default function AdminMaterials() {
   const [newMaterial, setNewMaterial] = useState({
     title: "",
     type: "file" as "video" | "file",
-    file: null as File | null
+    file: null as File | null,
   })
   const { user } = useAuth()
 
@@ -96,73 +96,89 @@ export default function AdminMaterials() {
       // Define accepted file types with their extensions and MIME types
       const acceptedTypes = {
         video: {
-          mimeTypes: ['video/mp4', 'video/webm', 'video/ogg'],
-          extensions: ['.mp4', '.webm', '.ogg'],
+          mimeTypes: ["video/mp4", "video/webm", "video/ogg"],
+          extensions: [".mp4", ".webm", ".ogg"],
           maxSize: 3 * 1024 * 1024 * 1024, // 3GB
         },
         file: {
           mimeTypes: [
             // Documents
-            'application/pdf',
-            'application/msword',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'application/vnd.ms-excel',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'text/plain',
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "text/plain",
             // Archives
-            'application/zip',
-            'application/x-rar-compressed',
+            "application/zip",
+            "application/x-rar-compressed",
             // Images
-            'image/jpeg',
-            'image/png',
-            'image/gif',
-            'image/webp'
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
           ],
           extensions: [
             // Documents
-            '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.txt',
+            ".pdf",
+            ".doc",
+            ".docx",
+            ".xls",
+            ".xlsx",
+            ".txt",
             // Archives
-            '.zip', '.rar',
+            ".zip",
+            ".rar",
             // Images
-            '.jpg', '.jpeg', '.png', '.gif', '.webp'
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".gif",
+            ".webp",
           ],
           maxSize: 500 * 1024 * 1024, // 500MB for regular files
-        }
+        },
       }
 
-      const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'))
+      const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf("."))
       const selectedType = newMaterial.type as keyof typeof acceptedTypes
       const typeConfig = acceptedTypes[selectedType]
 
       // Check file extension
       if (!typeConfig.extensions.includes(fileExtension)) {
-        alert(`Nieprawidłowy format pliku. Dozwolone formaty dla typu ${selectedType === 'video' ? 'wideo' : 'pliku'}:\n${typeConfig.extensions.join(', ')}`)
-        e.target.value = ''
+        alert(
+          `Nieprawidłowy format pliku. Dozwolone formaty dla typu ${selectedType === "video" ? "wideo" : "pliku"}:\n${typeConfig.extensions.join(", ")}`,
+        )
+        e.target.value = ""
         return
       }
 
       // Check MIME type
       if (!typeConfig.mimeTypes.includes(file.type)) {
-        alert(`Nieprawidłowy typ pliku. Dozwolone typy dla ${selectedType === 'video' ? 'wideo' : 'pliku'}:\n${typeConfig.extensions.join(', ')}`)
-        e.target.value = ''
+        alert(
+          `Nieprawidłowy typ pliku. Dozwolone typy dla ${selectedType === "video" ? "wideo" : "pliku"}:\n${typeConfig.extensions.join(", ")}`,
+        )
+        e.target.value = ""
         return
       }
 
       // Validate file size based on type
       if (file.size > typeConfig.maxSize) {
         const maxSizeMB = typeConfig.maxSize / (1024 * 1024)
-        alert(`Plik jest za duży (maksymalny rozmiar dla ${selectedType === 'video' ? 'wideo' : 'pliku'}: ${maxSizeMB}MB)`)
-        e.target.value = ''
+        alert(
+          `Plik jest za duży (maksymalny rozmiar dla ${selectedType === "video" ? "wideo" : "pliku"}: ${maxSizeMB}MB)`,
+        )
+        e.target.value = ""
         return
       }
 
-      console.log('Selected file:', {
+      console.log("Selected file:", {
         name: file.name,
         size: file.size,
         type: file.type,
-        extension: fileExtension
+        extension: fileExtension,
       })
-      setNewMaterial(prev => ({ ...prev, file }))
+      setNewMaterial((prev) => ({ ...prev, file }))
     }
   }
 
@@ -177,7 +193,7 @@ export default function AdminMaterials() {
     try {
       // Get CSRF token
       await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sanctum/csrf-cookie`, {
-        credentials: 'include'
+        credentials: "include",
       })
 
       const file = newMaterial.file
@@ -185,15 +201,15 @@ export default function AdminMaterials() {
       const chunkSize = getChunkSize(totalSize)
       const totalChunks = Math.ceil(totalSize / chunkSize)
       const fileHash = await calculateMD5(file)
-      
+
       let currentChunk = 0
       let uploadedSize = 0
 
       // Get CSRF token
       const csrfToken = document.cookie
-        .split('; ')
-        .find(row => row.startsWith('XSRF-TOKEN='))
-        ?.split('=')[1]
+        .split("; ")
+        .find((row) => row.startsWith("XSRF-TOKEN="))
+        ?.split("=")[1]
 
       if (!csrfToken) {
         throw new Error("Failed to get CSRF token")
@@ -203,55 +219,63 @@ export default function AdminMaterials() {
       while (currentChunk < totalChunks) {
         const start = currentChunk * chunkSize
         const end = Math.min(start + chunkSize, totalSize)
-        
+
         // Create a new blob for each chunk
         const chunkBlob = file.slice(start, end)
-        
+
         // Create a new FormData for each chunk
         const formData = new FormData()
-        formData.append('title', newMaterial.title)
-        formData.append('type', newMaterial.type)
-        formData.append('chunk', currentChunk.toString())
-        formData.append('chunks', totalChunks.toString())
-        formData.append('total_size', totalSize.toString())
-        formData.append('file_hash', fileHash)
-        formData.append('file_type', file.name.split('.').pop() || '')
-        
-        // Important: append the file with the proper name
-        // Create a new File with the original filename
-        const chunkFile = new File([chunkBlob], file.name, { type: file.type })
-        
-        // Check if the File object is valid before appending
-        if (chunkFile.size > 0) {
-          formData.append('file', chunkFile)
-          
-          console.log('Sending chunk', currentChunk, 'of', totalChunks, 'size:', chunkBlob.size, 'file name:', file.name)
-          
-          // Use axios instance with the proper headers
-          const response = await api.post("/api/admin/materials", formData, {
-            headers: {
-              'X-XSRF-TOKEN': decodeURIComponent(csrfToken),
-              'X-Requested-With': 'XMLHttpRequest',
-              'Content-Type': 'multipart/form-data'
-            },
-            onUploadProgress: (progressEvent) => {
-              const chunkProgress = progressEvent.loaded / progressEvent.total
-              const overallProgress = ((currentChunk + chunkProgress) / totalChunks) * 100
-              setUploadProgress(prev => ({ ...prev, [newMaterial.title]: Math.round(overallProgress) }))
-            }
-          })
+        formData.append("title", newMaterial.title)
+        formData.append("type", newMaterial.type)
+        formData.append("chunk", currentChunk.toString())
+        formData.append("chunks", totalChunks.toString())
+        formData.append("total_size", totalSize.toString())
+        formData.append("file_hash", fileHash)
+        formData.append("file_type", file.name.split(".").pop() || "")
 
-          if (response.status !== 200 && response.status !== 201) {
-            throw new Error(`Upload failed at chunk ${currentChunk}`)
+        // Important: append the file with the proper name
+        // Append the chunk blob directly with the original filename
+        // This is more reliable than creating a new File object
+        formData.append("file", chunkBlob, file.name)
+
+        console.log("Sending chunk", currentChunk, "of", totalChunks, "size:", chunkBlob.size, "file name:", file.name)
+
+        // Log the FormData contents for debugging
+        console.log("FormData entries:")
+        for (const pair of formData.entries()) {
+          if (pair[0] === "file") {
+            console.log(pair[0], "File object:", {
+              name: pair[1].name || "No name",
+              type: pair[1].type || "No type",
+              size: pair[1].size || "No size",
+            })
+          } else {
+            console.log(pair[0], pair[1])
           }
-        } else {
-          throw new Error(`Failed to create valid chunk file (size: ${chunkFile.size})`)
         }
-        
+
+        // Use axios instance with the proper headers
+        const response = await api.post("/api/admin/materials", formData, {
+          headers: {
+            "X-XSRF-TOKEN": decodeURIComponent(csrfToken),
+            "X-Requested-With": "XMLHttpRequest",
+            "Content-Type": "multipart/form-data",
+          },
+          onUploadProgress: (progressEvent) => {
+            const chunkProgress = progressEvent.loaded / progressEvent.total
+            const overallProgress = ((currentChunk + chunkProgress) / totalChunks) * 100
+            setUploadProgress((prev) => ({ ...prev, [newMaterial.title]: Math.round(overallProgress) }))
+          },
+        })
+
+        if (response.status !== 200 && response.status !== 201) {
+          throw new Error(`Upload failed at chunk ${currentChunk}`)
+        }
+
         currentChunk++
         uploadedSize = Math.min(uploadedSize + chunkSize, totalSize)
         const progress = Math.round((uploadedSize / totalSize) * 100)
-        setUploadProgress(prev => ({ ...prev, [newMaterial.title]: progress }))
+        setUploadProgress((prev) => ({ ...prev, [newMaterial.title]: progress }))
       }
 
       // Refresh materials list after successful upload
@@ -259,7 +283,6 @@ export default function AdminMaterials() {
       setMaterials(materialsResponse.data || [])
       setNewMaterial({ title: "", type: "file", file: null })
       setUploadProgress({})
-
     } catch (err: any) {
       console.error("Upload failed:", err)
       alert(err.message || "Nie udało się dodać materiału. Spróbuj ponownie później.")
@@ -274,14 +297,14 @@ export default function AdminMaterials() {
 
     try {
       await api.delete(`/api/admin/materials/${id}`)
-      setMaterials(materials.filter(m => m.id !== id))
+      setMaterials(materials.filter((m) => m.id !== id))
     } catch (err) {
       console.error("Failed to delete material:", err)
       alert("Nie udało się usunąć materiału. Spróbuj ponownie później.")
     }
   }
 
-  const filteredMaterials = materials.filter(material => {
+  const filteredMaterials = materials.filter((material) => {
     const matchesType = selectedType === "all" ? true : material.type === selectedType
     const matchesSearch = material.title.toLowerCase().includes(searchQuery.toLowerCase())
     return matchesType && matchesSearch
@@ -358,7 +381,7 @@ export default function AdminMaterials() {
                 type="text"
                 id="title"
                 value={newMaterial.title}
-                onChange={(e) => setNewMaterial(prev => ({ ...prev, title: e.target.value }))}
+                onChange={(e) => setNewMaterial((prev) => ({ ...prev, title: e.target.value }))}
                 className="w-full bg-black border border-gray-800 p-2"
                 required
               />
@@ -370,7 +393,7 @@ export default function AdminMaterials() {
               <select
                 id="type"
                 value={newMaterial.type}
-                onChange={(e) => setNewMaterial(prev => ({ ...prev, type: e.target.value as "video" | "file" }))}
+                onChange={(e) => setNewMaterial((prev) => ({ ...prev, type: e.target.value as "video" | "file" }))}
                 className="w-full bg-black border border-gray-800 p-2"
                 required
               >
@@ -412,10 +435,10 @@ export default function AdminMaterials() {
               {searchQuery
                 ? "Nie znaleziono materiałów spełniających kryteria wyszukiwania"
                 : selectedType === "all"
-                ? "Brak materiałów"
-                : selectedType === "video"
-                ? "Brak materiałów wideo"
-                : "Brak plików"}
+                  ? "Brak materiałów"
+                  : selectedType === "video"
+                    ? "Brak materiałów wideo"
+                    : "Brak plików"}
             </p>
           ) : (
             <div className="space-y-4">
@@ -424,13 +447,9 @@ export default function AdminMaterials() {
                   <div className="flex justify-between items-start">
                     <div>
                       <h3 className="text-lg font-semibold">{material.title}</h3>
-                      <p className="text-sm text-gray-400">
-                        Typ: {material.type === "video" ? "Wideo" : "Plik"}
-                      </p>
+                      <p className="text-sm text-gray-400">Typ: {material.type === "video" ? "Wideo" : "Plik"}</p>
                       {material.creator && (
-                        <p className="text-sm text-gray-400">
-                          Dodane przez: {material.creator.name}
-                        </p>
+                        <p className="text-sm text-gray-400">Dodane przez: {material.creator.name}</p>
                       )}
                       <p className="text-sm text-gray-400">
                         Data dodania:{" "}
@@ -441,7 +460,7 @@ export default function AdminMaterials() {
                           hour: "2-digit",
                           minute: "2-digit",
                           second: "2-digit",
-                          hour12: false
+                          hour12: false,
                         })}
                       </p>
                     </div>
@@ -467,4 +486,5 @@ export default function AdminMaterials() {
       </div>
     </PageTransition>
   )
-} 
+}
+
