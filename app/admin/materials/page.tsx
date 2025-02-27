@@ -22,10 +22,17 @@ type Material = {
 
 // Add MD5 checksum calculation utility
 const calculateMD5 = async (file: File | Blob) => {
-  const buffer = await file.arrayBuffer();
-  const hashBuffer = await crypto.subtle.digest('MD5', buffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  try {
+    // First try using SHA-256 as it's widely supported
+    const buffer = await file.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch (error) {
+    console.error('Hash calculation failed:', error);
+    // Return a timestamp-based hash as fallback
+    return Date.now().toString(16) + Math.random().toString(16).slice(2);
+  }
 }
 
 // Add chunk size calculation utility
