@@ -8,10 +8,6 @@ import { AuthProvider } from "@/hooks/useAuth"
 
 const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"] })
 
-export const metadata = {
-  title: "OSINT MASTERS",
-  description: "Studenckie kółko naukowe OSINT Masters"
-}
 
 interface Poll {
   id: number
