@@ -173,17 +173,10 @@ export default function AdminMaterials() {
     formData.append("mime_type", file.type)
     formData.append("checksum", await calculateMD5(chunkBlob))
 
-    // Log FormData contents
-    console.log('FormData contents:', {
-      title,
-      type,
-      fileName: file.name,
-      chunkSize: chunkBlob.size,
-      chunk,
-      chunks,
-      totalSize: file.size,
-      mimeType: file.type
-    })
+    // Log FormData contents for debugging
+    for (const [key, value] of formData.entries()) {
+      console.log(`${key}:`, value)
+    }
 
     const maxRetries = 3
     let currentRetry = retryCount
@@ -192,33 +185,37 @@ export default function AdminMaterials() {
     while (currentRetry < maxRetries) {
       try {
         console.log(`Uploading chunk ${chunk + 1}/${chunks}, size: ${chunkBlob.size} bytes, attempt: ${currentRetry + 1}`)
-        const response = await api.post<{ uploaded: boolean; progress: number }>("/api/admin/materials", formData, {
+        
+        // Use fetch instead of axios for better upload handling
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/materials`, {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
           headers: {
-            "Content-Type": "multipart/form-data",
-            "Accept": "application/json",
-            "X-Requested-With": "XMLHttpRequest",
-          },
-          timeout: 300000, // 5 minutes
-          onUploadProgress: (progressEvent) => {
-            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total!)
-            console.log(`Chunk ${chunk + 1} progress: ${percentCompleted}%`)
-            setUploadProgress(prev => ({
-              ...prev,
-              [title]: Math.round((chunk * chunkSize + progressEvent.loaded) * 100 / file.size)
-            }))
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
           }
         })
 
-        console.log('Chunk upload response:', response.data)
-        return response.data.uploaded
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+
+        const data = await response.json()
+        console.log('Chunk upload response:', data)
+
+        // Update progress
+        setUploadProgress(prev => ({
+          ...prev,
+          [title]: Math.round(((chunk + 1) * chunkSize) * 100 / file.size)
+        }))
+
+        return data.uploaded
       } catch (err: any) {
         console.error("Upload chunk error:", {
           chunk,
           attempt: currentRetry + 1,
-          status: err.response?.status,
-          data: err.response?.data,
-          error: err.message,
-          headers: err.response?.headers
+          error: err.message
         })
 
         lastError = err
@@ -227,16 +224,12 @@ export default function AdminMaterials() {
           throw new Error(err.response?.data?.message || "Błąd walidacji pliku")
         }
 
-        if (err.response?.status === 413 || (err.response?.status >= 500 && err.response?.status < 600)) {
-          currentRetry++
-          if (currentRetry < maxRetries) {
-            const backoffDelay = Math.pow(2, currentRetry) * 1000
-            console.log(`Retrying chunk ${chunk + 1} after ${backoffDelay}ms`)
-            await delay(backoffDelay)
-            continue
-          }
-        } else {
-          throw err
+        currentRetry++
+        if (currentRetry < maxRetries) {
+          const backoffDelay = Math.pow(2, currentRetry) * 1000
+          console.log(`Retrying chunk ${chunk + 1} after ${backoffDelay}ms`)
+          await delay(backoffDelay)
+          continue
         }
       }
     }
@@ -253,18 +246,7 @@ export default function AdminMaterials() {
       return
     }
 
-    const chunkSize = getChunkSize(newMaterial.file.size)
-    const chunks = Math.ceil(newMaterial.file.size / chunkSize)
-
     try {
-      console.log('Starting upload:', {
-        fileName: newMaterial.file.name,
-        fileSize: newMaterial.file.size,
-        chunks,
-        chunkSize,
-        mimeType: newMaterial.file.type
-      })
-
       setUploadProgress(prev => ({
         ...prev,
         [newMaterial.title]: 0
@@ -289,25 +271,24 @@ export default function AdminMaterials() {
           mimeType: newMaterial.file.type
         })
 
-        const response = await api.post("/api/admin/materials", formData, {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/materials`, {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
           headers: {
-            "Content-Type": "multipart/form-data",
-            "Accept": "application/json",
-            "X-Requested-With": "XMLHttpRequest",
-          },
-          timeout: 300000, // 5 minutes
-          onUploadProgress: (progressEvent) => {
-            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total!)
-            setUploadProgress(prev => ({
-              ...prev,
-              [newMaterial.title]: percentCompleted
-            }))
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
           }
         })
 
-        console.log('Upload response:', response.data)
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
 
-        if (response.data) {
+        const data = await response.json()
+        console.log('Upload response:', data)
+
+        if (data.uploaded) {
           console.log('Upload completed successfully')
           const materialsResponse = await api.get<Material[]>("/api/admin/materials")
           setMaterials(materialsResponse.data || [])
@@ -320,6 +301,9 @@ export default function AdminMaterials() {
       }
 
       // For larger files, use chunked upload
+      const chunkSize = getChunkSize(newMaterial.file.size)
+      const chunks = Math.ceil(newMaterial.file.size / chunkSize)
+
       for (let chunk = 0; chunk < chunks; chunk++) {
         const isComplete = await uploadChunk(
           newMaterial.file,
@@ -347,13 +331,8 @@ export default function AdminMaterials() {
         }
       }
     } catch (err: any) {
-      console.error("Upload failed:", {
-        error: err.message,
-        response: err.response?.data,
-        status: err.response?.status,
-        headers: err.response?.headers
-      })
-      alert(err.response?.data?.message || "Nie udało się dodać materiału. Spróbuj ponownie później.")
+      console.error("Upload failed:", err)
+      alert(err.message || "Nie udało się dodać materiału. Spróbuj ponownie później.")
       setUploadProgress({})
     }
   }
