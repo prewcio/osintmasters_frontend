@@ -1,3 +1,5 @@
+"use client"
+
 import type { ButtonHTMLAttributes, AnchorHTMLAttributes } from "react"
 import Link from "next/link"
 

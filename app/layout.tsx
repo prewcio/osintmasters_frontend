@@ -1,13 +1,12 @@
 "use client"
 import type React from "react"
+import { useState, useEffect } from "react"
 import "./globals.css"
-import { useAuth } from "@/hooks/useAuth"
+import { AuthProvider } from "@/hooks/useAuth"
 import api from "@/lib/axios"
 import { JetBrains_Mono } from "next/font/google"
-import { AuthProvider } from "@/hooks/useAuth"
 
 const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"] })
-
 
 interface Poll {
   id: number
@@ -15,13 +14,11 @@ interface Poll {
   expires_at?: string
 }
 
-
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const { user, loading } = useAuth()
   const [activeVotes, setActiveVotes] = useState(0)
 
   useEffect(() => {
@@ -43,14 +40,6 @@ export default function RootLayout({
     const interval = setInterval(fetchActiveVotes, 60000)
     return () => clearInterval(interval)
   }, [])
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        <div className="text-xl glitch">Loading...</div>
-      </div>
-    )
-  }
 
   return (
     <html lang="pl">

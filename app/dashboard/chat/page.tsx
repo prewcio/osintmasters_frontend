@@ -1,3 +1,5 @@
+"use client"
+
 import PageTransition from "@/components/page-transition"
 import LiveChat from "@/components/live-chat"
 
