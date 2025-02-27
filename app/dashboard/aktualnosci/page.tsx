@@ -6,7 +6,7 @@ import PageTransition from "@/components/page-transition"
 import { useAuth } from "@/hooks/useAuth"
 import api from "@/lib/axios"
 
-type Author = {
+type User = {
   id: number
   name: string
 }
@@ -14,7 +14,8 @@ type Author = {
 type NewsItem = {
   id: number
   content: string
-  author: Author
+  author: number
+  user: User
   created_at: string
   updated_at: string
   is_system_post: boolean
@@ -79,7 +80,7 @@ export default function News() {
               <div key={item.id} className="border border-gray-800 p-4 neon-box">
                 <p className="mb-2">{item.content}</p>
                 <p className="text-gray-400 text-sm">
-                  {item.author.name} @ {new Date(item.created_at).toLocaleString("pl-PL", {
+                  {item.is_system_post ? "SYSTEM" : item.user.name} @ {new Date(item.created_at).toLocaleString("pl-PL", {
                     day: "2-digit",
                     month: "2-digit",
                     year: "numeric",

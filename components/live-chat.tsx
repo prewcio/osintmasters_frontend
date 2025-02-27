@@ -13,9 +13,11 @@ import { NextResponse } from "next/server"
 
 type Message = {
   id: number
-  user: { id: number; name: string }
+  user_id: number
+  name: string
   content: string
   created_at: string
+  updated_at: string
 }
 
 type AblyMessage = Types.Message & {
@@ -76,9 +78,11 @@ export default function LiveChat() {
     const ablyMessage = message as AblyMessage
     const newMessage: Message = {
       id: Date.now(), // Use timestamp as temporary ID
-      user: ablyMessage.data.user,
+      user_id: ablyMessage.data.user.id,
+      name: ablyMessage.data.user.name,
       content: ablyMessage.data.content,
-      created_at: new Date(ablyMessage.timestamp).toISOString()
+      created_at: new Date(ablyMessage.timestamp).toISOString(),
+      updated_at: new Date(ablyMessage.timestamp).toISOString()
     }
     setMessages(prev => [...prev, newMessage])
   })
@@ -165,11 +169,11 @@ export default function LiveChat() {
         {messages.map((message) => (
           <div 
             key={message.id} 
-            className={`mb-2 flex items-start ${message.user.id === user.id ? 'justify-end' : 'justify-start'}`}
+            className={`mb-2 flex items-start ${message.user_id === user.id ? 'justify-end' : 'justify-start'}`}
           >
-            <div className={`max-w-[70%] ${message.user.id === user.id ? 'bg-[#39FF14]/10' : 'bg-gray-800/50'} p-2 rounded`}>
+            <div className={`max-w-[70%] ${message.user_id === user.id ? 'bg-[#39FF14]/10' : 'bg-gray-800/50'} p-2 rounded`}>
               <div className="flex items-center gap-2 mb-1">
-                <span className="font-bold text-sm">{message.user.name}</span>
+                <span className="font-bold text-sm">{message.name}</span>
                 <span className="text-gray-500 text-xs">
                   {new Date(message.created_at).toLocaleString()}
                 </span>
