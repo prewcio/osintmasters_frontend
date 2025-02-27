@@ -164,7 +164,7 @@ export default function AdminMaterials() {
     const formData = new FormData()
     formData.append("title", title)
     formData.append("type", type)
-    formData.append("file", chunkBlob)
+    formData.append("file", chunkBlob, file.name)
     formData.append("original_name", file.name)
     formData.append("chunk", chunk.toString())
     formData.append("chunks", chunks.toString())
@@ -172,6 +172,18 @@ export default function AdminMaterials() {
     formData.append("total_size", file.size.toString())
     formData.append("mime_type", file.type)
     formData.append("checksum", await calculateMD5(chunkBlob))
+
+    // Log FormData contents
+    console.log('FormData contents:', {
+      title,
+      type,
+      fileName: file.name,
+      chunkSize: chunkBlob.size,
+      chunk,
+      chunks,
+      totalSize: file.size,
+      mimeType: file.type
+    })
 
     const maxRetries = 3
     let currentRetry = retryCount
@@ -184,6 +196,7 @@ export default function AdminMaterials() {
           headers: {
             "Content-Type": "multipart/form-data",
             "Accept": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
           },
           timeout: 300000, // 5 minutes
           onUploadProgress: (progressEvent) => {
@@ -196,13 +209,16 @@ export default function AdminMaterials() {
           }
         })
 
+        console.log('Chunk upload response:', response.data)
         return response.data.uploaded
       } catch (err: any) {
         console.error("Upload chunk error:", {
           chunk,
           attempt: currentRetry + 1,
           status: err.response?.status,
-          data: err.response?.data
+          data: err.response?.data,
+          error: err.message,
+          headers: err.response?.headers
         })
 
         lastError = err
@@ -265,10 +281,19 @@ export default function AdminMaterials() {
         formData.append("mime_type", newMaterial.file.type)
         formData.append("checksum", await calculateMD5(newMaterial.file))
 
+        console.log('Uploading single file:', {
+          title: newMaterial.title,
+          type: newMaterial.type,
+          fileName: newMaterial.file.name,
+          size: newMaterial.file.size,
+          mimeType: newMaterial.file.type
+        })
+
         const response = await api.post("/api/admin/materials", formData, {
           headers: {
             "Content-Type": "multipart/form-data",
             "Accept": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
           },
           timeout: 300000, // 5 minutes
           onUploadProgress: (progressEvent) => {
@@ -279,6 +304,8 @@ export default function AdminMaterials() {
             }))
           }
         })
+
+        console.log('Upload response:', response.data)
 
         if (response.data) {
           console.log('Upload completed successfully')
@@ -323,7 +350,8 @@ export default function AdminMaterials() {
       console.error("Upload failed:", {
         error: err.message,
         response: err.response?.data,
-        status: err.response?.status
+        status: err.response?.status,
+        headers: err.response?.headers
       })
       alert(err.response?.data?.message || "Nie udało się dodać materiału. Spróbuj ponownie później.")
       setUploadProgress({})
