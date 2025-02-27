@@ -23,11 +23,11 @@ export default function DashboardLayout({
   useEffect(() => {
     const fetchActiveVotes = async () => {
       try {
-        const response = await api.get<{ polls: Poll[] }>("/api/polls/active")
+        const response = await api.get<{ polls: Poll[] }>("/api/votes/active")
         const activePollsCount = response.data.polls.filter(poll => 
           poll.active && (!poll.expires_at || new Date(poll.expires_at) > new Date())
         ).length
-        setActiveVotes(activePollsCount > 0 ? activePollsCount : 0)
+        setActiveVotes(activePollsCount)
       } catch (err) {
         console.error("Failed to fetch active votes count:", err)
         setActiveVotes(0)
