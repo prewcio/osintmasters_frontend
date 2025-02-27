@@ -155,39 +155,6 @@ export default function AdminMaterials() {
     }
   }
 
-  const getCsrfToken = async () => {
-    try {
-      // Get CSRF token
-      const csrfResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sanctum/csrf-cookie`, {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest',
-        }
-      });
-
-      if (!csrfResponse.ok) {
-        throw new Error('Failed to get CSRF token');
-      }
-
-      // Get the XSRF-TOKEN from cookies
-      const token = document.cookie
-        .split('; ')
-        .find(row => row.startsWith('XSRF-TOKEN='))
-        ?.split('=')[1];
-
-      if (!token) {
-        throw new Error('No CSRF token found in cookies');
-      }
-
-      return decodeURIComponent(token);
-    } catch (error) {
-      console.error('Error getting CSRF token:', error);
-      throw error;
-    }
-  };
-
   const uploadChunk = async (
     file: File,
     chunk: number,
@@ -200,6 +167,25 @@ export default function AdminMaterials() {
     const start = chunk * chunkSize
     const end = Math.min(start + chunkSize, file.size)
     const chunkBlob = file.slice(start, end)
+
+    // Get the authentication token
+    const token = localStorage.getItem("token")
+    if (!token) {
+      throw new Error("No authentication token found")
+    }
+
+    // Get CSRF token from cookie
+    const csrfToken = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('XSRF-TOKEN='))
+      ?.split('=')[1]
+
+    if (!csrfToken) {
+      // If no CSRF token, try to get a new one
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sanctum/csrf-cookie`, {
+        credentials: 'include'
+      })
+    }
 
     const formData = new FormData()
     formData.append("title", title)
@@ -226,10 +212,17 @@ export default function AdminMaterials() {
       try {
         console.log(`Uploading chunk ${chunk + 1}/${chunks}, size: ${chunkBlob.size} bytes, attempt: ${currentRetry + 1}`)
         
-        // Get fresh CSRF token before each attempt
-        const token = await getCsrfToken();
-        
-        // Use fetch instead of axios for better upload handling
+        // Get the current CSRF token
+        const currentCsrfToken = document.cookie
+          .split('; ')
+          .find(row => row.startsWith('XSRF-TOKEN='))
+          ?.split('=')[1]
+
+        if (!currentCsrfToken) {
+          throw new Error("No CSRF token found")
+        }
+
+        // Use fetch with both authentication and CSRF tokens
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/materials`, {
           method: 'POST',
           body: formData,
@@ -237,12 +230,14 @@ export default function AdminMaterials() {
           headers: {
             'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
-            'X-XSRF-TOKEN': token
+            'X-XSRF-TOKEN': decodeURIComponent(currentCsrfToken),
+            'Authorization': `Bearer ${token}`
           }
         })
 
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
+          const errorData = await response.json()
+          throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
         }
 
         const data = await response.json()
@@ -264,8 +259,19 @@ export default function AdminMaterials() {
 
         lastError = err
         
-        if (err.response?.status === 422) {
-          throw new Error(err.response?.data?.message || "Błąd walidacji pliku")
+        if (err.message.includes("CSRF token mismatch")) {
+          // Try to get a new CSRF token
+          await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sanctum/csrf-cookie`, {
+            credentials: 'include'
+          })
+          currentRetry++
+          continue
+        }
+
+        if (err.message === "Unauthenticated.") {
+          // Redirect to login if authentication fails
+          window.location.href = "/login"
+          return false
         }
 
         currentRetry++
@@ -291,6 +297,17 @@ export default function AdminMaterials() {
     }
 
     try {
+      // Get the authentication token
+      const token = localStorage.getItem("token")
+      if (!token) {
+        throw new Error("No authentication token found")
+      }
+
+      // Ensure we have a CSRF token
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sanctum/csrf-cookie`, {
+        credentials: 'include'
+      })
+
       setUploadProgress(prev => ({
         ...prev,
         [newMaterial.title]: 0
@@ -315,8 +332,15 @@ export default function AdminMaterials() {
           mimeType: newMaterial.file.type
         })
 
-        // Get fresh CSRF token before upload
-        const token = await getCsrfToken();
+        // Get the current CSRF token
+        const csrfToken = document.cookie
+          .split('; ')
+          .find(row => row.startsWith('XSRF-TOKEN='))
+          ?.split('=')[1]
+
+        if (!csrfToken) {
+          throw new Error("No CSRF token found")
+        }
 
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/materials`, {
           method: 'POST',
@@ -325,12 +349,14 @@ export default function AdminMaterials() {
           headers: {
             'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
-            'X-XSRF-TOKEN': token
+            'X-XSRF-TOKEN': decodeURIComponent(csrfToken),
+            'Authorization': `Bearer ${token}`
           }
         })
 
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
+          const errorData = await response.json()
+          throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
         }
 
         const data = await response.json()
@@ -380,7 +406,12 @@ export default function AdminMaterials() {
       }
     } catch (err: any) {
       console.error("Upload failed:", err)
-      alert(err.message || "Nie udało się dodać materiału. Spróbuj ponownie później.")
+      if (err.message.includes("CSRF token mismatch") || err.message === "Unauthenticated.") {
+        // Refresh the page to get new tokens
+        window.location.reload()
+      } else {
+        alert(err.message || "Nie udało się dodać materiału. Spróbuj ponownie później.")
+      }
       setUploadProgress({})
     }
   }
