@@ -75,39 +75,65 @@ export default function AdminMaterials() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      // Validate file type
-      const validTypes = {
-        video: ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'],
-        file: [
-          'application/pdf',
-          'application/msword',
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'application/vnd.ms-excel',
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'text/plain',
-          'application/zip',
-          'application/x-rar-compressed',
-          'image/jpeg',
-          'image/png',
-          'image/gif',
-          'image/webp'
-        ]
+      // Define accepted file types with their extensions and MIME types
+      const acceptedTypes = {
+        video: {
+          mimeTypes: ['video/mp4', 'video/webm', 'video/ogg'],
+          extensions: ['.mp4', '.webm', '.ogg'],
+          maxSize: 3 * 1024 * 1024 * 1024, // 3GB
+        },
+        file: {
+          mimeTypes: [
+            // Documents
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'text/plain',
+            // Archives
+            'application/zip',
+            'application/x-rar-compressed',
+            // Images
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/webp'
+          ],
+          extensions: [
+            // Documents
+            '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.txt',
+            // Archives
+            '.zip', '.rar',
+            // Images
+            '.jpg', '.jpeg', '.png', '.gif', '.webp'
+          ],
+          maxSize: 500 * 1024 * 1024, // 500MB for regular files
+        }
       }
 
-      const isValidType = newMaterial.type === 'video' 
-        ? validTypes.video.includes(file.type)
-        : validTypes.file.includes(file.type)
+      const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'))
+      const selectedType = newMaterial.type as keyof typeof acceptedTypes
+      const typeConfig = acceptedTypes[selectedType]
 
-      if (!isValidType) {
-        alert("Nieprawidłowy format pliku")
+      // Check file extension
+      if (!typeConfig.extensions.includes(fileExtension)) {
+        alert(`Nieprawidłowy format pliku. Dozwolone formaty dla typu ${selectedType === 'video' ? 'wideo' : 'pliku'}:\n${typeConfig.extensions.join(', ')}`)
         e.target.value = ''
         return
       }
 
-      // Validate file size
-      const maxSize = 3 * 1024 * 1024 * 1024 // 3GB
-      if (file.size > maxSize) {
-        alert("Plik jest za duży (maksymalny rozmiar: 3GB)")
+      // Check MIME type
+      if (!typeConfig.mimeTypes.includes(file.type)) {
+        alert(`Nieprawidłowy typ pliku. Dozwolone typy dla ${selectedType === 'video' ? 'wideo' : 'pliku'}:\n${typeConfig.extensions.join(', ')}`)
+        e.target.value = ''
+        return
+      }
+
+      // Validate file size based on type
+      if (file.size > typeConfig.maxSize) {
+        const maxSizeMB = typeConfig.maxSize / (1024 * 1024)
+        alert(`Plik jest za duży (maksymalny rozmiar dla ${selectedType === 'video' ? 'wideo' : 'pliku'}: ${maxSizeMB}MB)`)
         e.target.value = ''
         return
       }
@@ -115,7 +141,8 @@ export default function AdminMaterials() {
       console.log('Selected file:', {
         name: file.name,
         size: file.size,
-        type: file.type
+        type: file.type,
+        extension: fileExtension
       })
       setNewMaterial(prev => ({ ...prev, file }))
     }
