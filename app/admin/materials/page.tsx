@@ -217,28 +217,35 @@ export default function AdminMaterials() {
         formData.append('file_hash', fileHash)
         formData.append('file_type', file.name.split('.').pop() || '')
         
-        // Important: append the file last and give it a proper filename
-        // This is critical - create a new File with a name from the blob
+        // Important: append the file with the proper name
+        // Create a new File with the original filename
         const chunkFile = new File([chunkBlob], file.name, { type: file.type })
-        formData.append('file', chunkFile)
         
-        console.log('Sending chunk', currentChunk, 'of', totalChunks, 'size:', chunkBlob.size)
-        
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/materials`, {
-          method: 'POST',
-          body: formData,
-          credentials: 'include',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem("token")}`,
-            'X-XSRF-TOKEN': decodeURIComponent(csrfToken),
-            'X-Requested-With': 'XMLHttpRequest'
-            // Don't set Content-Type header manually - let the browser set it with the boundary
-          }
-        })
+        // Check if the File object is valid before appending
+        if (chunkFile.size > 0) {
+          formData.append('file', chunkFile)
+          
+          console.log('Sending chunk', currentChunk, 'of', totalChunks, 'size:', chunkBlob.size, 'file name:', file.name)
+          
+          // Use axios instance with the proper headers
+          const response = await api.post("/api/admin/materials", formData, {
+            headers: {
+              'X-XSRF-TOKEN': decodeURIComponent(csrfToken),
+              'X-Requested-With': 'XMLHttpRequest',
+              'Content-Type': 'multipart/form-data'
+            },
+            onUploadProgress: (progressEvent) => {
+              const chunkProgress = progressEvent.loaded / progressEvent.total
+              const overallProgress = ((currentChunk + chunkProgress) / totalChunks) * 100
+              setUploadProgress(prev => ({ ...prev, [newMaterial.title]: Math.round(overallProgress) }))
+            }
+          })
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ message: 'Unknown error' }))
-          throw new Error(errorData.message || `Upload failed at chunk ${currentChunk}`)
+          if (response.status !== 200 && response.status !== 201) {
+            throw new Error(`Upload failed at chunk ${currentChunk}`)
+          }
+        } else {
+          throw new Error(`Failed to create valid chunk file (size: ${chunkFile.size})`)
         }
         
         currentChunk++
