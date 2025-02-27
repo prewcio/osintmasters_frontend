@@ -27,10 +27,16 @@ type AblyMessage = Types.Message & {
 }
 
 // Configure Ably client
-configureAbly({
-  authUrl: `${process.env.NEXT_PUBLIC_API_URL}/api/ably/auth`,
-  clientId: Math.random().toString(36).substring(2, 15)
-})
+const configureAblyClient = async () => {
+  const clientId = Math.random().toString(36).substring(2, 15);
+  
+  const response = await api.post('/api/ably/auth', { clientId });
+  
+  return {
+    authUrl: response.data.token,
+    clientId,
+  };
+};
 
 export default function LiveChat() {
   const [messages, setMessages] = useState<Message[]>([])
@@ -38,6 +44,20 @@ export default function LiveChat() {
   const { user } = useAuth()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [memberCount, setMemberCount] = useState(0)
+
+  useEffect(() => {
+    const setupAbly = async () => {
+      const { authUrl, clientId } = await configureAblyClient();
+      configureAbly({
+        authUrl,
+        clientId,
+      });
+    };
+
+    if (user) {
+      setupAbly();
+    }
+  }, [user]);
 
   // Subscribe to Ably channel
   const [channel] = useChannel(CHAT_CHANNEL, (message) => {
