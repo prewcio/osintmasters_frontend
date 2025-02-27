@@ -53,17 +53,17 @@ export default function News() {
     <PageTransition>
       <div className="container mx-auto px-4 py-6 max-w-7xl">
         <h2 className="text-center text-2xl md:text-3xl lg:text-4xl mb-8 glitch">WSZYSTKIE AKTUALNOŚCI</h2>
-        <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        <div className="space-y-6">
           {loading ? (
-            <div className="col-span-full">
+            <div className="text-center">
               <p className="text-center">Loading...</p>
             </div>
           ) : error ? (
-            <div className="col-span-full">
+            <div>
               <p className="text-center text-red-500">{error}</p>
             </div>
           ) : news.length === 0 ? (
-            <div className="col-span-full">
+            <div>
               <p className="text-center text-gray-400">Brak danych</p>
             </div>
           ) : (

@@ -88,18 +88,17 @@ export default function Meetings() {
           {/* Upcoming Meetings */}
           <div>
             <h2 className="text-2xl md:text-3xl font-bold mb-6">Nadchodzące spotkania</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="space-y-6">
               {upcomingMeetings.length === 0 ? (
-                <p className="col-span-full text-center text-gray-400 py-8">Brak nadchodzących spotkań</p>
+                <p className="text-center text-gray-400 py-8">Brak nadchodzących spotkań</p>
               ) : (
                 upcomingMeetings.map(meeting => {
                   const meetingDate = new Date(meeting.date)
 
                   return (
-                    <Link
+                    <div
                       key={meeting.id}
-                      href={`/dashboard/meetings/${meeting.id}`}
-                      className="block neon-box p-6 hover:border-[#39FF14] transition-all hover:shadow-lg hover:scale-102 rounded-lg"
+                      className="neon-box p-6 hover:border-[#39FF14] transition-all hover:shadow-lg hover:scale-102 rounded-lg"
                     >
                       <div className="flex flex-col h-full">
                         <div className="flex-grow">
@@ -119,7 +118,6 @@ export default function Meetings() {
                               href={meeting.link}
                               target="_blank"
                               rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
                               className="inline-block w-full bg-black text-white border border-[#39FF14] hover:bg-[#39FF14] hover:text-black transition-all duration-300 px-4 py-2 text-sm rounded-md"
                             >
                               Dołącz
@@ -127,7 +125,7 @@ export default function Meetings() {
                           </div>
                         )}
                       </div>
-                    </Link>
+                    </div>
                   )
                 })
               )}
@@ -137,19 +135,18 @@ export default function Meetings() {
           {/* Past Meetings */}
           <div>
             <h2 className="text-2xl md:text-3xl font-bold mb-6">Poprzednie spotkania</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="space-y-6">
               {pastMeetings.length === 0 ? (
-                <p className="col-span-full text-center text-gray-400 py-8">Brak poprzednich spotkań</p>
+                <p className="text-center text-gray-400 py-8">Brak poprzednich spotkań</p>
               ) : (
                 pastMeetings.map(meeting => {
                   const meetingDate = new Date(meeting.date)
                   const daysAgo = Math.round((now.getTime() - meetingDate.getTime()) / (1000 * 60 * 60 * 24))
 
                   return (
-                    <Link
+                    <div
                       key={meeting.id}
-                      href={`/dashboard/meetings/${meeting.id}`}
-                      className="block neon-box p-6 opacity-75 hover:opacity-100 transition-all hover:shadow-lg hover:scale-102 rounded-lg"
+                      className="neon-box p-6 opacity-75 hover:opacity-100 transition-all hover:shadow-lg hover:scale-102 rounded-lg"
                     >
                       <h3 className="text-lg font-semibold mb-3 line-clamp-2">{meeting.title}</h3>
                       <p className="text-gray-300 line-clamp-3 mb-3">{meeting.description}</p>
@@ -163,7 +160,7 @@ export default function Meetings() {
                           ? "Wczoraj"
                           : `${daysAgo} dni temu`}
                       </p>
-                    </Link>
+                    </div>
                   )
                 })
               )}
