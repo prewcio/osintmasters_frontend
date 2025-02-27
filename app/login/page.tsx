@@ -22,26 +22,26 @@ export default function Login() {
     setLoading(true)
 
     try {
-      // First, get the CSRF token
-      await api.get("/sanctum/csrf-cookie", {
-        withCredentials: true,
+      // First, get the CSRF token using fetch
+      const csrfResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sanctum/csrf-cookie`, {
+        method: 'GET',
+        credentials: 'include',
         headers: {
-          "Accept": "application/json",
-          "X-Requested-With": "XMLHttpRequest"
-        }
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          'Origin': window.location.origin,
+          'Referer': window.location.origin,
+        },
       })
+
+      if (!csrfResponse.ok) {
+        throw new Error('Failed to get CSRF token')
+      }
 
       // Then attempt login
       const response = await api.post("/api/login", {
         email,
         password,
-      }, {
-        withCredentials: true,
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "X-Requested-With": "XMLHttpRequest"
-        }
       })
 
       if (response.data.token) {

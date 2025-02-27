@@ -56,25 +56,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Set the token in axios defaults
       api.defaults.headers.common["Authorization"] = `Bearer ${token}`
       
-      // Try to get the CSRF token
-      await api.get("/sanctum/csrf-cookie", {
-        withCredentials: true,
+      // Try to get the CSRF token using fetch
+      const csrfResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sanctum/csrf-cookie`, {
+        method: 'GET',
+        credentials: 'include',
         headers: {
-          "Accept": "application/json",
-          "X-Requested-With": "XMLHttpRequest"
-        }
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          'Origin': window.location.origin,
+          'Referer': window.location.origin,
+        },
       })
+
+      if (!csrfResponse.ok) {
+        throw new Error('Failed to get CSRF token')
+      }
 
       // Get user data
-      const response = await api.get("/api/user", {
-        withCredentials: true,
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Accept": "application/json",
-          "X-Requested-With": "XMLHttpRequest"
-        }
-      })
-
+      const response = await api.get("/api/user")
       setUser(response.data)
     } catch (error) {
       console.error("Auth check failed:", error)
@@ -94,28 +93,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string) => {
     try {
-      // Get CSRF cookie first
-      await api.get("/sanctum/csrf-cookie", {
-        withCredentials: true,
+      // Get CSRF token using fetch
+      const csrfResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sanctum/csrf-cookie`, {
+        method: 'GET',
+        credentials: 'include',
         headers: {
-          "Accept": "application/json",
-          "X-Requested-With": "XMLHttpRequest"
-        }
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          'Origin': window.location.origin,
+          'Referer': window.location.origin,
+        },
       })
+
+      if (!csrfResponse.ok) {
+        throw new Error('Failed to get CSRF token')
+      }
       
       // Attempt login
-      const response = await api.post("/api/login", 
-        { email, password },
-        {
-          withCredentials: true,
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "X-Requested-With": "XMLHttpRequest"
-          }
-        }
-      )
-
+      const response = await api.post("/api/login", { email, password })
       const token = response.data.token
       
       // Store token
@@ -133,14 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     try {
       const token = localStorage.getItem("token")
-      await api.post("/api/logout", null, {
-        withCredentials: true,
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Accept": "application/json",
-          "X-Requested-With": "XMLHttpRequest"
-        }
-      })
+      await api.post("/api/logout", null)
     } catch (error) {
       console.error("Logout failed:", error)
     } finally {
@@ -155,18 +143,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updateUser = async (data: FormData) => {
     try {
       const token = localStorage.getItem("token")
-      const response = await api.post("/api/user/update", 
-        data,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-            "Authorization": `Bearer ${token}`,
-            "Accept": "application/json",
-            "X-Requested-With": "XMLHttpRequest"
-          },
-          withCredentials: true
+      const response = await api.post("/api/user/update", data, {
+        headers: {
+          "Content-Type": "multipart/form-data",
         }
-      )
+      })
       setUser(response.data)
     } catch (error) {
       console.error("Failed to update user:", error)

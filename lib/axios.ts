@@ -72,19 +72,24 @@ const processFailedQueue = (error: any = null) => {
 // Get CSRF cookie before making any requests
 const getCsrfToken = async () => {
   try {
-    await api.get("/sanctum/csrf-cookie", {
-      withCredentials: true,
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sanctum/csrf-cookie`, {
+      method: 'GET',
+      credentials: 'include',
       headers: {
-        "Accept": "application/json",
-        "X-Requested-With": "XMLHttpRequest"
-      }
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Origin': typeof window !== 'undefined' ? window.location.origin : '',
+        'Referer': typeof window !== 'undefined' ? window.location.origin : '',
+      },
     })
+
+    if (!response.ok) {
+      throw new Error('Failed to get CSRF token')
+    }
+
+    // The CSRF token will be automatically set in the cookies by Laravel Sanctum
   } catch (error: any) {
     console.error("Failed to get CSRF token:", error)
-    if (error.response?.status === 500 && 
-        error.response?.data?.message?.includes("no such table: sessions")) {
-      return
-    }
     throw error
   }
 }
@@ -109,15 +114,9 @@ api.interceptors.request.use(
         config.headers["X-XSRF-TOKEN"] = decodeURIComponent(token)
       }
 
-      // Add origin header
+      // Add common headers
       config.headers["Origin"] = window.location.origin
-
-      // Special handling for login endpoint
-      if (config.url === "/api/login") {
-        config.headers["Access-Control-Allow-Origin"] = "*"
-        config.headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS"
-        config.headers["Access-Control-Allow-Headers"] = "Content-Type, X-XSRF-TOKEN, X-Requested-With"
-      }
+      config.headers["Referer"] = window.location.origin
 
       return config
     } catch (error) {
@@ -135,6 +134,12 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config
+
+    // Handle CORS preflight error
+    if (error.response?.status === 0 && error.message === 'Network Error') {
+      console.error('CORS error detected')
+      return Promise.reject(new Error('CORS error: Please check server configuration'))
+    }
 
     // If we get a 401 and we haven't tried to refresh the session yet
     if (error.response?.status === 401 && !originalRequest._retry) {
