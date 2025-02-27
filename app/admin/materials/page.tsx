@@ -175,9 +175,6 @@ export default function AdminMaterials() {
     }
 
     try {
-      const token = localStorage.getItem("token")
-      if (!token) throw new Error("No authentication token found")
-
       // Get CSRF token
       await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sanctum/csrf-cookie`, {
         credentials: 'include'
@@ -202,18 +199,21 @@ export default function AdminMaterials() {
         throw new Error("Failed to get CSRF token")
       }
 
+      // Upload each chunk
       while (currentChunk < totalChunks) {
         const start = currentChunk * chunkSize
         const end = Math.min(start + chunkSize, totalSize)
         const chunk = file.slice(start, end)
+        
+        // Create a file object from the chunk
+        const chunkFile = new File([chunk], file.name, { type: file.type })
 
         const formData = new FormData()
         formData.append('title', newMaterial.title)
         formData.append('type', newMaterial.type)
-        formData.append('file', chunk, file.name) // Include original filename
+        formData.append('file', chunkFile) // Use the File object, not the blob
         formData.append('chunk', currentChunk.toString())
         formData.append('chunks', totalChunks.toString())
-        formData.append('chunk_size', chunkSize.toString())
         formData.append('total_size', totalSize.toString())
         formData.append('file_hash', fileHash)
         formData.append('file_type', file.name.split('.').pop() || '')
@@ -223,7 +223,7 @@ export default function AdminMaterials() {
           body: formData,
           credentials: 'include',
           headers: {
-            'Authorization': `Bearer ${token}`,
+            'Authorization': `Bearer ${localStorage.getItem("token")}`,
             'X-XSRF-TOKEN': decodeURIComponent(csrfToken),
             'X-Requested-With': 'XMLHttpRequest'
           }
