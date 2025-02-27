@@ -19,11 +19,11 @@ type QueueItem = {
 }
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.49:8000",
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "https://api.osintmasters.pl",
   headers: {
     "Content-Type": "application/json",
     "X-Requested-With": "XMLHttpRequest",
-    "Accept": "application/json"
+    "Accept": "application/json",
   },
   withCredentials: true
 })
@@ -57,6 +57,7 @@ if (typeof window !== 'undefined') {
   checkAuthAndRedirect()
 }
 
+// Process the failed queue
 const processFailedQueue = (error: any = null) => {
   failedQueue.forEach((promise) => {
     if (error) {
@@ -71,32 +72,19 @@ const processFailedQueue = (error: any = null) => {
 // Get CSRF cookie before making any requests
 const getCsrfToken = async () => {
   try {
-    await api.get("/sanctum/csrf-cookie")
+    await api.get("/sanctum/csrf-cookie", {
+      withCredentials: true,
+      headers: {
+        "Accept": "application/json",
+        "X-Requested-With": "XMLHttpRequest"
+      }
+    })
   } catch (error: any) {
     console.error("Failed to get CSRF token:", error)
-    // Check for the specific error case
     if (error.response?.status === 500 && 
         error.response?.data?.message?.includes("no such table: sessions")) {
       return
     }
-    throw error
-  }
-}
-
-// Attempt to restore the session
-const restoreSession = async () => {
-  try {
-    await getCsrfToken()
-    const response = await api.get("/api/user")
-    if (response.data) {
-      // If we successfully restored the session and we're on a public path, redirect to dashboard
-      if (typeof window !== 'undefined' && ['/', '/login'].includes(window.location.pathname)) {
-        return null
-      }
-    }
-    return response.data
-  } catch (error) {
-    console.error("Failed to restore session:", error)
     throw error
   }
 }
@@ -120,6 +108,9 @@ api.interceptors.request.use(
         // Laravel expects the token in X-XSRF-TOKEN header
         config.headers["X-XSRF-TOKEN"] = decodeURIComponent(token)
       }
+
+      // Add origin header
+      config.headers["Origin"] = window.location.origin
 
       return config
     } catch (error) {
@@ -153,22 +144,25 @@ api.interceptors.response.use(
       isRefreshingSession = true
 
       try {
-        // Attempt to restore the session
-        await restoreSession()
+        // Attempt to get a new CSRF token
+        await getCsrfToken()
         processFailedQueue()
         return api(originalRequest)
       } catch (refreshError) {
         processFailedQueue(refreshError)
-        // Only redirect to login if we're not already on the login page
+        // Clear any stored tokens
+        localStorage.removeItem("token")
         if (window.location.pathname !== '/login') {
-          return Promise.reject(refreshError)
+          window.location.href = '/login'
         }
+        return Promise.reject(refreshError)
       } finally {
         isRefreshingSession = false
       }
-    } else if (error.response?.status === 419) {
-      // CSRF token mismatch - try to get a new token and retry the request
-      console.log("CSRF token mismatch - retrying with new token")
+    }
+
+    // Handle CSRF token mismatch
+    if (error.response?.status === 419) {
       try {
         await getCsrfToken()
         return api(originalRequest)
