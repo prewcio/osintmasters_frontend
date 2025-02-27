@@ -155,140 +155,6 @@ export default function AdminMaterials() {
     }
   }
 
-  const uploadChunk = async (
-    file: File,
-    chunk: number,
-    chunks: number,
-    chunkSize: number,
-    title: string,
-    type: "video" | "file",
-    retryCount = 0
-  ) => {
-    const start = chunk * chunkSize
-    const end = Math.min(start + chunkSize, file.size)
-    const chunkBlob = file.slice(start, end)
-
-    // Get the authentication token
-    const token = localStorage.getItem("token")
-    if (!token) {
-      throw new Error("No authentication token found")
-    }
-
-    // Get CSRF token from cookie
-    const csrfToken = document.cookie
-      .split('; ')
-      .find(row => row.startsWith('XSRF-TOKEN='))
-      ?.split('=')[1]
-
-    if (!csrfToken) {
-      // If no CSRF token, try to get a new one
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sanctum/csrf-cookie`, {
-        credentials: 'include'
-      })
-    }
-
-    const formData = new FormData()
-    formData.append("title", title)
-    formData.append("type", type)
-    formData.append("file", chunkBlob, file.name)
-    formData.append("original_name", file.name)
-    formData.append("chunk", chunk.toString())
-    formData.append("chunks", chunks.toString())
-    formData.append("chunk_size", chunkSize.toString())
-    formData.append("total_size", file.size.toString())
-    formData.append("mime_type", file.type)
-    formData.append("checksum", await calculateMD5(chunkBlob))
-
-    // Log FormData contents for debugging
-    for (const [key, value] of formData.entries()) {
-      console.log(`${key}:`, value)
-    }
-
-    const maxRetries = 3
-    let currentRetry = retryCount
-    let lastError = null
-
-    while (currentRetry < maxRetries) {
-      try {
-        console.log(`Uploading chunk ${chunk + 1}/${chunks}, size: ${chunkBlob.size} bytes, attempt: ${currentRetry + 1}`)
-        
-        // Get the current CSRF token
-        const currentCsrfToken = document.cookie
-          .split('; ')
-          .find(row => row.startsWith('XSRF-TOKEN='))
-          ?.split('=')[1]
-
-        if (!currentCsrfToken) {
-          throw new Error("No CSRF token found")
-        }
-
-        // Use fetch with both authentication and CSRF tokens
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/materials`, {
-          method: 'POST',
-          body: formData,
-          credentials: 'include',
-          headers: {
-            'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-XSRF-TOKEN': decodeURIComponent(currentCsrfToken),
-            'Authorization': `Bearer ${token}`
-          }
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
-        }
-
-        const data = await response.json()
-        console.log('Chunk upload response:', data)
-
-        // Update progress
-        setUploadProgress(prev => ({
-          ...prev,
-          [title]: Math.round(((chunk + 1) * chunkSize) * 100 / file.size)
-        }))
-
-        return data.uploaded
-      } catch (err: any) {
-        console.error("Upload chunk error:", {
-          chunk,
-          attempt: currentRetry + 1,
-          error: err.message
-        })
-
-        lastError = err
-        
-        if (err.message.includes("CSRF token mismatch")) {
-          // Try to get a new CSRF token
-          await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sanctum/csrf-cookie`, {
-            credentials: 'include'
-          })
-          currentRetry++
-          continue
-        }
-
-        if (err.message === "Unauthenticated.") {
-          // Redirect to login if authentication fails
-          window.location.href = "/login"
-          return false
-        }
-
-        currentRetry++
-        if (currentRetry < maxRetries) {
-          const backoffDelay = Math.pow(2, currentRetry) * 1000
-          console.log(`Retrying chunk ${chunk + 1} after ${backoffDelay}ms`)
-          await delay(backoffDelay)
-          continue
-        }
-      }
-    }
-
-    throw lastError
-  }
-
-  const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newMaterial.file || !newMaterial.title) {
@@ -313,47 +179,57 @@ export default function AdminMaterials() {
         [newMaterial.title]: 0
       }))
 
-      // Always use chunked upload
-      const chunkSize = getChunkSize(newMaterial.file.size)
-      const chunks = Math.ceil(newMaterial.file.size / chunkSize)
+      // Create FormData
+      const formData = new FormData()
+      formData.append("title", newMaterial.title)
+      formData.append("type", newMaterial.type)
+      formData.append("file", newMaterial.file)
+      formData.append("file_type", newMaterial.file.name.split('.').pop() || '')
 
-      console.log('Starting upload:', {
-        fileName: newMaterial.file.name,
-        fileSize: newMaterial.file.size,
-        chunks,
-        chunkSize
+      // Get the current CSRF token
+      const currentCsrfToken = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('XSRF-TOKEN='))
+        ?.split('=')[1]
+
+      if (!currentCsrfToken) {
+        throw new Error("No CSRF token found")
+      }
+
+      // Send the request
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/materials`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          'X-XSRF-TOKEN': decodeURIComponent(currentCsrfToken),
+          'Authorization': `Bearer ${token}`
+        }
       })
 
-      for (let chunk = 0; chunk < chunks; chunk++) {
-        const isComplete = await uploadChunk(
-          newMaterial.file,
-          chunk,
-          chunks,
-          chunkSize,
-          newMaterial.title,
-          newMaterial.type
-        )
-
-        if (isComplete) {
-          console.log('Upload completed successfully')
-          const response = await api.get<Material[]>("/api/admin/materials")
-          setMaterials(response.data || [])
-          setNewMaterial({ title: "", type: "file", file: null })
-          const fileInput = document.getElementById("file") as HTMLInputElement
-          if (fileInput) fileInput.value = ""
-          setUploadProgress({})
-          break
-        }
-
-        // Add a small delay between chunks to prevent overwhelming the server
-        if (chunk < chunks - 1) {
-          await delay(200)
-        }
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
       }
+
+      const data = await response.json()
+      console.log('Upload response:', data)
+
+      // Update materials list
+      const materialsResponse = await api.get<Material[]>("/api/admin/materials")
+      setMaterials(materialsResponse.data || [])
+      
+      // Reset form
+      setNewMaterial({ title: "", type: "file", file: null })
+      const fileInput = document.getElementById("file") as HTMLInputElement
+      if (fileInput) fileInput.value = ""
+      setUploadProgress({})
+
     } catch (err: any) {
       console.error("Upload failed:", err)
       if (err.message.includes("CSRF token mismatch") || err.message === "Unauthenticated.") {
-        // Refresh the page to get new tokens
         window.location.reload()
       } else {
         alert(err.message || "Nie udało się dodać materiału. Spróbuj ponownie później.")
