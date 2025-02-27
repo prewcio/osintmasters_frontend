@@ -163,77 +163,65 @@ export default function AdminMaterials() {
     }
 
     try {
-      // Get the authentication token
       const token = localStorage.getItem("token")
-      if (!token) {
-        throw new Error("No authentication token found")
-      }
+      if (!token) throw new Error("No authentication token found")
 
-      // Ensure we have a CSRF token
+      // Get CSRF token
       await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sanctum/csrf-cookie`, {
         credentials: 'include'
       })
 
-      setUploadProgress(prev => ({
-        ...prev,
-        [newMaterial.title]: 0
-      }))
+      const file = newMaterial.file
+      const totalSize = file.size
+      const chunkSize = getChunkSize(totalSize)
+      const totalChunks = Math.ceil(totalSize / chunkSize)
+      const fileHash = await calculateMD5(file)
+      
+      let currentChunk = 0
+      let uploadedSize = 0
 
-      // Create FormData
-      const formData = new FormData()
-      formData.append("title", newMaterial.title)
-      formData.append("type", newMaterial.type)
-      formData.append("file", newMaterial.file)
-      formData.append("file_type", newMaterial.file.name.split('.').pop() || '')
+      while (currentChunk < totalChunks) {
+        const start = currentChunk * chunkSize
+        const end = Math.min(start + chunkSize, totalSize)
+        const chunk = file.slice(start, end)
 
-      // Get the current CSRF token
-      const currentCsrfToken = document.cookie
-        .split('; ')
-        .find(row => row.startsWith('XSRF-TOKEN='))
-        ?.split('=')[1]
+        const formData = new FormData()
+        formData.append('title', newMaterial.title)
+        formData.append('type', newMaterial.type)
+        formData.append('file', chunk)
+        formData.append('chunk', currentChunk.toString())
+        formData.append('chunks', totalChunks.toString())
+        formData.append('chunk_size', chunkSize.toString())
+        formData.append('total_size', totalSize.toString())
+        formData.append('file_hash', fileHash)
 
-      if (!currentCsrfToken) {
-        throw new Error("No CSRF token found")
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/materials`, {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        })
+
+        if (!response.ok) throw new Error(`Upload failed at chunk ${currentChunk}`)
+        
+        currentChunk++
+        uploadedSize += chunk.size
+        const progress = Math.round((uploadedSize / totalSize) * 100)
+        setUploadProgress(prev => ({ ...prev, [newMaterial.title]: progress }))
       }
 
-      // Send the request
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/materials`, {
-        method: 'POST',
-        body: formData,
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest',
-          'X-XSRF-TOKEN': decodeURIComponent(currentCsrfToken),
-          'Authorization': `Bearer ${token}`
-        }
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
-      console.log('Upload response:', data)
-
-      // Update materials list
+      // Finalize upload and refresh list
       const materialsResponse = await api.get<Material[]>("/api/admin/materials")
       setMaterials(materialsResponse.data || [])
-      
-      // Reset form
       setNewMaterial({ title: "", type: "file", file: null })
-      const fileInput = document.getElementById("file") as HTMLInputElement
-      if (fileInput) fileInput.value = ""
       setUploadProgress({})
 
     } catch (err: any) {
       console.error("Upload failed:", err)
-      if (err.message.includes("CSRF token mismatch") || err.message === "Unauthenticated.") {
-        window.location.reload()
-      } else {
-        alert(err.message || "Nie udało się dodać materiału. Spróbuj ponownie później.")
-      }
+      alert(err.message || "Nie udało się dodać materiału. Spróbuj ponownie później.")
       setUploadProgress({})
     }
   }
