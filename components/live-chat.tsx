@@ -33,7 +33,14 @@ const configureAblyClient = async () => {
   const clientId = Math.random().toString(36).substring(2, 15);
   
   return {
-    authUrl: `/api/ably?clientId=${clientId}`,
+    authUrl: `/api/ably/auth`,
+    authMethod: 'POST',
+    authHeaders: {
+      'Content-Type': 'application/json',
+    },
+    authParams: {
+      clientId,
+    },
     clientId,
   };
 };
