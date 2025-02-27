@@ -25,7 +25,10 @@ const api = axios.create({
     "X-Requested-With": "XMLHttpRequest",
     "Accept": "application/json",
   },
-  withCredentials: true
+  withCredentials: true,
+  timeout: 300000, // 5 minutes
+  maxContentLength: Infinity,
+  maxBodyLength: Infinity
 })
 
 // Track if we're currently refreshing the session

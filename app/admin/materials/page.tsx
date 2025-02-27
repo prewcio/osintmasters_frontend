@@ -20,6 +20,21 @@ type Material = {
   }
 }
 
+// Add MD5 checksum calculation utility
+const calculateMD5 = async (file: File | Blob) => {
+  const buffer = await file.arrayBuffer();
+  const hashBuffer = await crypto.subtle.digest('MD5', buffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Add chunk size calculation utility
+const getChunkSize = (fileSize: number) => {
+  if (fileSize <= 100 * 1024 * 1024) return 1 * 1024 * 1024 // 1MB for files up to 100MB
+  if (fileSize <= 1024 * 1024 * 1024) return 5 * 1024 * 1024 // 5MB for files up to 1GB
+  return 10 * 1024 * 1024 // 10MB for files larger than 1GB
+}
+
 export default function AdminMaterials() {
   const [materials, setMaterials] = useState<Material[]>([])
   const [loading, setLoading] = useState(true)
@@ -90,9 +105,9 @@ export default function AdminMaterials() {
       }
 
       // Validate file size
-      const maxSize = 500 * 1024 * 1024 // 500MB
+      const maxSize = 3 * 1024 * 1024 * 1024 // 3GB
       if (file.size > maxSize) {
-        alert("Plik jest za duży (maksymalny rozmiar: 500MB)")
+        alert("Plik jest za duży (maksymalny rozmiar: 3GB)")
         e.target.value = ''
         return
       }
@@ -129,49 +144,61 @@ export default function AdminMaterials() {
     formData.append("chunk_size", chunkSize.toString())
     formData.append("total_size", file.size.toString())
     formData.append("mime_type", file.type)
+    formData.append("checksum", await calculateMD5(chunkBlob))
 
-    try {
-      console.log(`Uploading chunk ${chunk + 1}/${chunks}, size: ${chunkBlob.size} bytes`)
-      const response = await api.post<{ uploaded: boolean; progress: number }>("/api/admin/materials", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-          "Accept": "application/json",
-        },
-        onUploadProgress: (progressEvent) => {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total!)
-          console.log(`Chunk ${chunk + 1} progress: ${percentCompleted}%`)
+    const maxRetries = 3
+    let currentRetry = retryCount
+    let lastError = null
+
+    while (currentRetry < maxRetries) {
+      try {
+        console.log(`Uploading chunk ${chunk + 1}/${chunks}, size: ${chunkBlob.size} bytes, attempt: ${currentRetry + 1}`)
+        const response = await api.post<{ uploaded: boolean; progress: number }>("/api/admin/materials", formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            "Accept": "application/json",
+          },
+          timeout: 300000, // 5 minutes
+          onUploadProgress: (progressEvent) => {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total!)
+            console.log(`Chunk ${chunk + 1} progress: ${percentCompleted}%`)
+            setUploadProgress(prev => ({
+              ...prev,
+              [title]: Math.round((chunk * chunkSize + progressEvent.loaded) * 100 / file.size)
+            }))
+          }
+        })
+
+        return response.data.uploaded
+      } catch (err: any) {
+        console.error("Upload chunk error:", {
+          chunk,
+          attempt: currentRetry + 1,
+          status: err.response?.status,
+          data: err.response?.data
+        })
+
+        lastError = err
+        
+        if (err.response?.status === 422) {
+          throw new Error(err.response?.data?.message || "Błąd walidacji pliku")
         }
-      })
 
-      setUploadProgress(prev => ({
-        ...prev,
-        [title]: response.data.progress
-      }))
-
-      return response.data.uploaded
-    } catch (err: any) {
-      console.error("Upload chunk error:", {
-        chunk,
-        status: err.response?.status,
-        data: err.response?.data,
-        headers: err.response?.headers
-      })
-      
-      if (err.response?.status === 422) {
-        throw new Error(err.response?.data?.message || "Błąd walidacji pliku")
-      }
-      
-      // If we get a "Content Too Large" error or it's a server error (5xx)
-      if (err.response?.status === 413 || (err.response?.status >= 500 && err.response?.status < 600)) {
-        if (retryCount < 3) {
-          console.log(`Retrying chunk ${chunk + 1} with smaller size (attempt ${retryCount + 1})`)
-          // Wait before retrying with exponential backoff
-          await delay((retryCount + 1) * 1000)
-          return uploadChunk(file, chunk, chunks, chunkSize / 2, title, type, retryCount + 1)
+        if (err.response?.status === 413 || (err.response?.status >= 500 && err.response?.status < 600)) {
+          currentRetry++
+          if (currentRetry < maxRetries) {
+            const backoffDelay = Math.pow(2, currentRetry) * 1000
+            console.log(`Retrying chunk ${chunk + 1} after ${backoffDelay}ms`)
+            await delay(backoffDelay)
+            continue
+          }
+        } else {
+          throw err
         }
       }
-      throw err
     }
+
+    throw lastError
   }
 
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
@@ -183,8 +210,7 @@ export default function AdminMaterials() {
       return
     }
 
-    // Use smaller chunks for better reliability
-    const chunkSize = 1 * 1024 * 1024 // Start with 1MB chunks
+    const chunkSize = getChunkSize(newMaterial.file.size)
     const chunks = Math.ceil(newMaterial.file.size / chunkSize)
 
     try {
@@ -201,8 +227,8 @@ export default function AdminMaterials() {
         [newMaterial.title]: 0
       }))
 
-      // For small files (< 2MB), upload in one chunk
-      if (newMaterial.file.size <= 2 * 1024 * 1024) {
+      // For small files (< 5MB), upload in one chunk
+      if (newMaterial.file.size <= 5 * 1024 * 1024) {
         const formData = new FormData()
         formData.append("title", newMaterial.title)
         formData.append("type", newMaterial.type)
@@ -210,12 +236,14 @@ export default function AdminMaterials() {
         formData.append("original_name", newMaterial.file.name)
         formData.append("total_size", newMaterial.file.size.toString())
         formData.append("mime_type", newMaterial.file.type)
+        formData.append("checksum", await calculateMD5(newMaterial.file))
 
         const response = await api.post("/api/admin/materials", formData, {
           headers: {
             "Content-Type": "multipart/form-data",
             "Accept": "application/json",
           },
+          timeout: 300000, // 5 minutes
           onUploadProgress: (progressEvent) => {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total!)
             setUploadProgress(prev => ({
@@ -259,7 +287,10 @@ export default function AdminMaterials() {
           break
         }
 
-        await delay(500) // 0.5 second delay between chunks
+        // Add a small delay between chunks to prevent overwhelming the server
+        if (chunk < chunks - 1) {
+          await delay(200)
+        }
       }
     } catch (err: any) {
       console.error("Upload failed:", {
